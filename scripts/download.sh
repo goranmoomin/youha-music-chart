@@ -34,7 +34,7 @@ urlencode() {
 }
 
 if [[ ! -v YOUTUBE_API_KEY ]]; then die 'Youtube API key not set.'; fi
-timestamp="$(date +'%Y-%m-%dT%H:%M:%S%z')"
+timestamp="$(date +'%Y.%m.%d.%H:00')"
 youtube_dir="$chart_dir/youtube-data-$timestamp"
 mkdir -p "$youtube_dir"
 jq -r '.response.HITSSONGLIST[:3][] | .SONGNAME + " " + (.ARTISTLIST | map(.ARTISTNAME) | join(" "))' "$chart_dir/$chart_name.json" | while IFS= read -r query; do
@@ -44,3 +44,5 @@ jq -r '.response.HITSSONGLIST[:3][] | .SONGNAME + " " + (.ARTISTLIST | map(.ARTI
     ids="$(jq -r '[.items[].id.videoId] | join(",")' "$search_list_file")"
     curl -sS "https://www.googleapis.com/youtube/v3/videos?key=$YOUTUBE_API_KEY&part=statistics&id=$ids" > "$youtube_dir/video-list-response-$encoded_query.json"
 done
+
+msg "Downloaded YouTube data to youtube-data-$timestamp."
