@@ -8,14 +8,14 @@ let getJSON = bent("json");
 
 (async () => {
     let { response: { HITSSONGLIST: melonChartList } } = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
-    for (let song of melonChartList.slice(0, 10)) {
+    for (let song of melonChartList.slice(0, 3)) {
         let name = song.SONGNAME;
         let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
         let { data: { items: searchedVideos } } = await youtube.search.list({
             auth: process.env.YOUTUBE_API_KEY,
             part: "id",
             q: query,
-            maxResults: 5
+            maxResults: 10
         });
 
         let videosStatistics = await youtube.videos.list({
