@@ -39,8 +39,8 @@ async function sortedChart(date) {
         let currentStatistics = await readJSONFile(youtubeDataFilePath(date, query));
         let pastStatistics = await readJSONFile(youtubeDataFilePath(pastDate, query));
 
-        let commonIds = currentStatistics.items.map(item => item.id)
-            .filter(id => pastStatistics.items.some(item => item.id == id));
+        let commonIds = currentStatistics.items.slice(0, 5).map(item => item.id)
+            .filter(id => pastStatistics.items.slice(0, 5).some(item => item.id == id));
 
         let score = 0;
         for (let id of commonIds) {
