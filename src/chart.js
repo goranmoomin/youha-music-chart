@@ -24,7 +24,7 @@ async function getYoutubeStatistics(date, query) {
     let hours = `${date.getHours()}`.padStart(2, "0");
     let minutes = `${Math.floor(date.getMinutes() / 15) * 15}`.padStart(2, "0");
     let path = `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/` +
-        `video-list-response-${query}.json`;
+        `video-list-response-${query.replaceAll("/", "")}.json`;
     return await readJSONFile(path);
 }
 
@@ -37,7 +37,6 @@ async function getSortedChart(date) {
         let videoCounts = new Map();
         let name = song.SONGNAME;
         let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
-        query.replace("/", "");
 
         let currentStatistics = await getYoutubeStatistics(date, query);
         let pastStatistics = await getYoutubeStatistics(pastDate, query);
