@@ -1,4 +1,5 @@
 let fs = require("fs").promises;
+let { melonDataPath, youtubeVideoDataPath } = require("./path.js");
 
 async function readJSONFile(path) {
     let data = await fs.readFile(path);
@@ -7,24 +8,13 @@ async function readJSONFile(path) {
 }
 
 async function getMelonChart(date) {
-    let year = `${date.getFullYear()}`;
-    let month = `${date.getMonth() + 1}`.padStart(2, "0");
-    let day = `${date.getDate()}`.padStart(2, "0");
-    let hours = `${date.getHours()}`.padStart(2, "0");
-    let path = `charts/chart-${year}.${month}.${day}.${hours}:00.json`;
-
+    let path = melonDataPath(date);
     let { response: { HITSSONGLIST: melonChartList } } = await readJSONFile(path);
     return melonChartList;
 }
 
 async function getYoutubeStatistics(date, query) {
-    let year = `${date.getFullYear()}`;
-    let month = `${date.getMonth() + 1}`.padStart(2, "0");
-    let day = `${date.getDate()}`.padStart(2, "0");
-    let hours = `${date.getHours()}`.padStart(2, "0");
-    let minutes = `${Math.floor(date.getMinutes() / 15) * 15}`.padStart(2, "0");
-    let path = `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/` +
-        `video-list-response-${query.replace(/\//g, "")}.json`;
+    let path = youtubeVideoDataPath(date, query);
     return await readJSONFile(path);
 }
 
