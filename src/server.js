@@ -8,7 +8,7 @@ http.createServer(async (req, res) => {
     let date = new Date();
     let chart = await getSortedChart(date);
     let melonChart = await getMelonChart(date);
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < chart.length; i++) {
         let music = chart[i];
         let melonMusic = melonChart[i];
         html += `<tr><td>${i + 1}</td><td><img src="${music.melonData.ALBUMIMGSMALL}"></td><td>${music.name}</td><td>${music.score.toFixed(2)}</td><td><img src="${melonMusic.ALBUMIMGSMALL}"></td><td>${melonMusic.SONGNAME}</td></tr>`;

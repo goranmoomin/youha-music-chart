@@ -29,7 +29,12 @@ async function getSortedChart(date) {
         let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
 
         let currentStatistics = await getYoutubeStatistics(date, query);
-        let pastStatistics = await getYoutubeStatistics(pastDate, query);
+        let pastStatistics;
+        try {
+            pastStatistics = await getYoutubeStatistics(pastDate, query);
+        } catch (e) {
+            continue;
+        }
 
         let commonIds = currentStatistics.items.slice(0, 5).map(item => item.id)
             .filter(id => pastStatistics.items.slice(0, 5).some(item => item.id == id));
