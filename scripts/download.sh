@@ -39,7 +39,7 @@ filenameify() {
 }
 
 if [[ ! -v YOUTUBE_API_KEY ]]; then die 'Youtube API key not set.'; fi
-timestamp="$(TZ=Asia/Seoul date +'%Y.%m.%d.%H:00')"
+timestamp="$(TZ=Asia/Seoul date +'%Y.%m.%d.%H:%M')"
 youtube_dir="$chart_dir/youtube-data-$timestamp"
 mkdir -p "$youtube_dir"
 jq -r '.response.HITSSONGLIST[:3][] | .SONGNAME + " " + (.ARTISTLIST | map(.ARTISTNAME) | join(" "))' "$chart_dir/$chart_name.json" | while IFS= read -r query; do
