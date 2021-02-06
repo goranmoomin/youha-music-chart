@@ -8,6 +8,7 @@
     "dependencies": {
         "bent": "^7.3.12",
         "dotenv": "^8.2.0",
+        "fs-extra": "^9.1.0",
         "googleapis": "^67.0.0"
     }
 }
