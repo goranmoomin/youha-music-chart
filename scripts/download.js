@@ -29,7 +29,7 @@ let getJSON = bent("json");
             maxResults: 50
         });
         await fs.outputJSON(youtubeSearchDataPath, rawYoutubeSearchData);
-        let youtubeVideoDataPath = `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/video-list-response-${query.replaceAll("/", "")}.json`;
+        let youtubeVideoDataPath = `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/video-list-response-${query.replace(/\//g, "")}.json`;
         let searchedVideos = rawYoutubeSearchData.data.items;
         let rawYoutubeVideoData = await youtube.videos.list({
             auth: process.env.YOUTUBE_API_KEY,

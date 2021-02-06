@@ -1,4 +1,4 @@
-let fs = require("fs/promises");
+let fs = require("fs").promises;
 
 async function readJSONFile(path) {
     let data = await fs.readFile(path);
@@ -24,7 +24,7 @@ async function getYoutubeStatistics(date, query) {
     let hours = `${date.getHours()}`.padStart(2, "0");
     let minutes = `${Math.floor(date.getMinutes() / 15) * 15}`.padStart(2, "0");
     let path = `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/` +
-        `video-list-response-${query.replaceAll("/", "")}.json`;
+        `video-list-response-${query.replace(/\//g, "")}.json`;
     return await readJSONFile(path);
 }
 
