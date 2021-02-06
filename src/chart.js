@@ -6,29 +6,32 @@ async function readJSONFile(path) {
     return json;
 }
 
-async function sortedChart(date) {
+async function getMelonChart(date) {
+    let year = `${date.getFullYear()}`;
+    let month = `${date.getMonth() + 1}`.padStart(2, "0");
+    let day = `${date.getDate()}`.padStart(2, "0");
+    let hours = `${date.getHours()}`.padStart(2, "0");
+    let path = `charts/chart-${year}.${month}.${day}.${hours}:00.json`;
+
+    let { response: { HITSSONGLIST: melonChartList } } = await readJSONFile(path);
+    return melonChartList;
+}
+
+async function getYoutubeStatistics(date, query) {
+    let year = `${date.getFullYear()}`;
+    let month = `${date.getMonth() + 1}`.padStart(2, "0");
+    let day = `${date.getDate()}`.padStart(2, "0");
+    let hours = `${date.getHours()}`.padStart(2, "0");
+    let minutes = `${Math.floor(date.getMinutes() / 15) * 15}`.padStart(2, "0");
+    let path = `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/` +
+        `video-list-response-${query}.json`;
+    return await readJSONFile(path);
+}
+
+async function getSortedChart(date) {
     let pastDate = new Date(date.getTime() - 900000);
-
-    function melonChartFilePath(date) {
-        let year = `${date.getFullYear()}`;
-        let month = `${date.getMonth() + 1}`.padStart(2, "0");
-        let day = `${date.getDate()}`.padStart(2, "0");
-        let hours = `${date.getHours()}`.padStart(2, "0");
-        return `charts/chart-${year}.${month}.${day}.${hours}:00.json`;
-    }
-    let { response: { HITSSONGLIST: melonChartList } } = await readJSONFile(melonChartFilePath(date));
-
+    let melonChartList = await getMelonChart(date);
     let musicScores = new Map();
-
-    function youtubeDataFilePath(date, query) {
-        let year = `${date.getFullYear()}`;
-        let month = `${date.getMonth() + 1}`.padStart(2, "0");
-        let day = `${date.getDate()}`.padStart(2, "0");
-        let hours = `${date.getHours()}`.padStart(2, "0");
-        let minutes = `${Math.floor(date.getMinutes() / 15) * 15}`.padStart(2, "0");
-        return `charts/youtube-data-${year}.${month}.${day}.${hours}:${minutes}/` +
-            `video-list-response-${query}.json`;
-    }
 
     for (let song of melonChartList) {
         let videoCounts = new Map();
@@ -36,8 +39,8 @@ async function sortedChart(date) {
         let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
         query.replace("/", "");
 
-        let currentStatistics = await readJSONFile(youtubeDataFilePath(date, query));
-        let pastStatistics = await readJSONFile(youtubeDataFilePath(pastDate, query));
+        let currentStatistics = await getYoutubeStatistics(date, query);
+        let pastStatistics = await getYoutubeStatistics(pastDate, query);
 
         let commonIds = currentStatistics.items.slice(0, 5).map(item => item.id)
             .filter(id => pastStatistics.items.slice(0, 5).some(item => item.id == id));
@@ -61,4 +64,7 @@ async function sortedChart(date) {
     return chart;
 }
 
-module.exports = sortedChart;
+module.exports = {
+    getMelonChart,
+    getSortedChart
+};
