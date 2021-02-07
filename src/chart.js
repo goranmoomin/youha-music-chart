@@ -15,7 +15,8 @@ async function getMelonChart(date) {
 
 async function getYoutubeStatistics(date, query) {
     let path = youtubeVideoDataPath(date, query);
-    return await readJSONFile(path);
+    let { data: youtubeData } = await readJSONFile(path);
+    return youtubeData;
 }
 
 async function getSortedChart(date) {
