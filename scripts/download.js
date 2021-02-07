@@ -5,7 +5,7 @@ let bent = require("bent");
 let { google } = require("googleapis");
 let youtube = google.youtube("v3");
 
-let { melonDataPath, youtubeVideoDataPath, youtubeSearchDataPath } = require("../src/path.js");
+let { melonDataPath, youtubeDataPath, youtubeVideoDataPath, youtubeSearchDataPath } = require("../src/path.js");
 
 let getJSON = bent("json");
 
@@ -13,8 +13,9 @@ let getJSON = bent("json");
     let rawMelonData = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
     let date = new Date();
     await fs.outputJSON(melonDataPath(date), rawMelonData);
+    console.log(`Downloaded Melon chart to ${melonDataPath(date)}.`);
     let melonChartList = rawMelonData.response.HITSSONGLIST;
-    Promise.all(melonChartList.map(async song => {
+    await Promise.all(melonChartList.map(async song => {
         let name = song.SONGNAME;
         let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
         let rawYoutubeSearchData = await youtube.search.list({
@@ -32,4 +33,5 @@ let getJSON = bent("json");
         });
         await fs.outputJSON(youtubeVideoDataPath(date, query), rawYoutubeVideoData);
     }));
+    console.log(`Downloaded YouTube data to ${youtubeDataPath(date)}.`);
 })();

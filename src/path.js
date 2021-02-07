@@ -7,24 +7,26 @@ function melonDataPath(date) {
     return path;
 }
 
-function youtubeVideoDataPath(date, query) {
+function youtubeDataPath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
     date.setMinutes(Math.floor(date.getMinutes() / 15) * 15);
-    query = query.replace(/\//g, "");
-    let path = `charts/youtube-data-${format(date, "yyyy.MM.dd.HH:mm")}/video-list-response-${query}.json`;
+    let path = `charts/youtube-data-${format(date, "yyyy.MM.dd.HH:mm")}`;
+    return path;
+}
+
+function youtubeVideoDataPath(date, query) {
+    let path = `${youtubeDataPath(date)}/video-list-response-${query}.json`;
     return path;
 }
 
 function youtubeSearchDataPath(date, query) {
-    date = utcToZonedTime(date, "Asia/Seoul");
-    date.setMinutes(Math.floor(date.getMinutes() / 15) * 15);
-    query = query.replace(/\//g, "");
-    let path = `charts/youtube-data-${format(date, "yyyy.MM.dd.HH:mm")}/search-list-response-${query}.json`;
+    let path = `${youtubeDataPath(date)}/search-list-response-${query}.json`;
     return path;
 }
 
 module.exports = {
     melonDataPath,
+    youtubeDataPath,
     youtubeVideoDataPath,
     youtubeSearchDataPath
 };
