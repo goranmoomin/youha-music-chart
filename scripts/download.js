@@ -4,7 +4,7 @@ let fs = require("fs-extra");
 let bent = require("bent");
 let { google } = require("googleapis");
 let youtube = google.youtube("v3");
-let { differenceInHours } = require("date-fns");
+let { differenceInMinutes } = require("date-fns");
 
 let {
     formatDate,
@@ -70,7 +70,7 @@ let getJSON = bent("json");
                     }
                     throw e;
                 }
-            } while (pageToken && differenceInHours(date, lastDate) < 1)
+            } while (pageToken && differenceInMinutes(date, lastDate) < 15)
         }));
     }));
     console.log(`Downloaded YouTube data to ${youtubeDataPath(date)}.`);
