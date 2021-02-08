@@ -1,5 +1,10 @@
 let { utcToZonedTime, format } = require("date-fns-tz");
 
+function formatDate(date) {
+    date = utcToZonedTime(date, "Asia/Seoul");
+    return format(date, "yyyy.MM.dd.HH:mm");
+}
+
 function melonDataPath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
     date.setMinutes(0);
@@ -24,9 +29,16 @@ function youtubeSearchDataPath(date, query) {
     return path;
 }
 
+function youtubeCommentThreadDataPath(date, videoId, index) {
+    let path = `${youtubeDataPath(date)}/comment-thread-list-response-${videoId}-${index}.json`;
+    return path;
+}
+
 module.exports = {
+    formatDate,
     melonDataPath,
     youtubeDataPath,
     youtubeVideoDataPath,
-    youtubeSearchDataPath
+    youtubeSearchDataPath,
+    youtubeCommentThreadDataPath
 };
