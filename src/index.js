@@ -1,29 +1,23 @@
-require("dotenv").config();
+let Koa = require("koa");
+let Router = require("@koa/router");
 
-let bent = require("bent");
-let { google } = require("googleapis");
-let youtube = google.youtube("v3");
+let { getMelonChart, getSortedChart } = require("./chart.js");
 
-let getJSON = bent("json");
-
-(async () => {
-    let { response: { HITSSONGLIST: melonChartList } } = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
-    for (let song of melonChartList.slice(0, 3)) {
-        let name = song.SONGNAME;
-        let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
-        let { data: { items: searchedVideos } } = await youtube.search.list({
-            auth: process.env.YOUTUBE_API_KEY,
-            part: "id",
-            q: query,
-            maxResults: 10
-        });
-
-        let videosStatistics = await youtube.videos.list({
-            auth: process.env.YOUTUBE_API_KEY,
-            part: "statistics",
-            id: searchedVideos.map(video => video.id.videoId)
-        });
-        let videosViewCount = videosStatistics.data.items.reduce((viewCount, video) => viewCount + Number.parseInt(video.statistics.viewCount), 0);
-        console.log(name, videosViewCount);
+let app = new Koa();
+let router = new Router();
+router.get("/", async (ctx, next) => {
+    let html = `<html><head><meta charset="utf-8"><link rel="stylesheet" href="https://unpkg.com/mvp.css"></head><body><section><table><thead><tr><th>순위</th><th>앨범 표지</th><th>곡 이름</th><th>점수</th><th>앨범 표지</th><th>곡 이름</th></tr></thead><tbody>`;
+    let date = new Date();
+    let chart = await getSortedChart(date);
+    let melonChart = await getMelonChart(date);
+    for (let i = 0; i < chart.length; i++) {
+        let music = chart[i];
+        let melonMusic = melonChart[i];
+        html += `<tr><td>${i + 1}</td><td><img src="${music.melonData.ALBUMIMGSMALL}"></td><td>${music.name}</td><td>${music.score.toFixed(2)}</td><td><img src="${melonMusic.ALBUMIMGSMALL}"></td><td>${melonMusic.SONGNAME}</td></tr>`;
     }
-})();
+    html += "</tbody></table></section></body></html>";
+    ctx.body = html;
+});
+app.use(router.routes());
+
+app.listen(8080);
