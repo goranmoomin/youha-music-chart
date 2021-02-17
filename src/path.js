@@ -34,11 +34,17 @@ function youtubeCommentThreadDataPath(date, videoId, index) {
     return path;
 }
 
+function youtubeCommentThreadCacheDataPath(date, videoId) {
+    let path = `${youtubeDataPath(date)}/comment-thread-cache-${videoId}.json`;
+    return path;
+}
+
 module.exports = {
     formatDate,
     melonDataPath,
     youtubeDataPath,
     youtubeVideoDataPath,
     youtubeSearchDataPath,
-    youtubeCommentThreadDataPath
+    youtubeCommentThreadDataPath,
+    youtubeCommentThreadCacheDataPath
 };
