@@ -18,6 +18,19 @@ router.get("/", async (ctx, next) => {
     html += "</tbody></table></section></body></html>";
     ctx.body = html;
 });
+
+router.get("/chart", async (ctx, next) => {
+    let date = new Date();
+    let chart = await getSortedChart(date);
+    ctx.body = chart;
+});
+
+router.get("/chart/:date", async (ctx, next) => {
+    let date = new Date(ctx.params.date);
+    let chart = await getSortedChart(date);
+    ctx.body = chart;
+});
+
 app.use(router.routes());
 
 app.listen(8080);
