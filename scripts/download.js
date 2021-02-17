@@ -99,7 +99,6 @@ function hasKoreanLetter(comment) {
                         break;
                     }
                     throw e;
-                    console.log(pageToken);
                 }
             } while (pageToken && differenceInMinutes(date, lastDate) < 15)
 
@@ -111,24 +110,18 @@ function hasKoreanLetter(comment) {
                     let data = await fs.readFile(path);
                     data = JSON.parse(data);
                     if (data.hasOwnProperty("recentCommentInfo")) {
-                        console.log("enter");
                         totalCommentCount += data["recentCommentInfo"]["total"];
                         totalKoreanCommentCount += data["recentCommentInfo"]["korean"];
                     }
                 } catch (error) {
                     if (error.code != "ENOENT") {
-                        console.log("path", path);
                         throw error;
                     }
                 }
             }));
             videoCommentsCache["totalCommentInfo"] = { "total": totalCommentCount, "korean": totalKoreanCommentCount };
-            console.log(videoCommentsCache);
 
-            if (Object.keys(videoCommentsCache).length < 2) {
-                console.log("date", date);
-                console.log("videoId", videoId);
-            } else {
+            if (Object.keys(videoCommentsCache).length >= 2) {
                 videoCommentsCache["totalCommentInfo"]["total"] += videoCommentsCache["recentCommentInfo"]["total"];
                 videoCommentsCache["totalCommentInfo"]["korean"] += videoCommentsCache["recentCommentInfo"]["korean"];
                 await fs.outputJSON(youtubeCommentThreadCacheDataPath(date, videoId), videoCommentsCache);

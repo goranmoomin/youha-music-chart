@@ -26,7 +26,6 @@ async function getKoreanCommentRate(date, videoId) {
     try {
         let json = await readJSONFile(path);
         let info = json["totalCommentInfo"];
-        console.log(info);
         if (info["total"] == 0) { return null; }
         return info["korean"] / info["total"];
     } catch (error) {
@@ -70,7 +69,6 @@ async function getSortedChart(date) {
                 exceptionCount += 1;
             } else {
                 score += (currentViewCount - pastViewCount) * koreanCommentRate;
-                console.log(koreanCommentRate);
             }
         }
         if (commonIds.length > exceptionCount) {
