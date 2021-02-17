@@ -34,7 +34,10 @@ async function getSortedChart(date) {
         try {
             pastStatistics = await getYoutubeStatistics(pastDate, query);
         } catch (e) {
-            continue;
+            if (e.code == "ENOENT") {
+                continue;
+            }
+            throw e;
         }
 
         let commonIds = currentStatistics.items.slice(0, 5).map(item => item.id)
