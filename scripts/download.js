@@ -80,7 +80,7 @@ function hasKoreanLetter(comment) {
                     let recentCommentCount = 0, recentKoreanCommentCount = 0;
                     commentThreads.map(comment => {
                         let commentSnippet = comment.snippet.topLevelComment.snippet;
-                        if (differenceInMinutes(date, new Date(commentSnippet.publishedAt)) < 15) {
+                        if (differenceInMinutes(date, new Date(commentSnippet.publishedAt)) < 30) {
                             recentCommentCount += 1;
                             if (hasKoreanLetter(commentSnippet.textOriginal)) {
                                 recentKoreanCommentCount += 1;
@@ -100,11 +100,11 @@ function hasKoreanLetter(comment) {
                     }
                     throw e;
                 }
-            } while (pageToken && differenceInMinutes(date, lastDate) < 15)
+            } while (pageToken && differenceInMinutes(date, lastDate) < 30)
 
             let totalCommentCount = 0, totalKoreanCommentCount = 0;
-            await Promise.all([...Array(2 * 4 * 24).keys()].map(async prev => {
-                let prevDate = new Date(date.getTime() - prev * 1000 * 60 * 15);
+            await Promise.all([...Array(2 * (60 / 30) * 24).keys()].map(async prev => {
+                let prevDate = new Date(date.getTime() - prev * 1000 * 60 * 30);
                 let path = youtubeCommentThreadCacheDataPath(prevDate, videoId);
                 try {
                     let data = await fs.readFile(path);

@@ -14,7 +14,7 @@ function melonDataPath(date) {
 
 function youtubeDataPath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
-    date.setMinutes(Math.floor(date.getMinutes() / 15) * 15);
+    date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
     let path = `charts/youtube-data-${format(date, "yyyy.MM.dd.HH:mm")}`;
     return path;
 }
