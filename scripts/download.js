@@ -19,8 +19,42 @@ let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 
 let getJSON = bent("json");
 
+function optimizeMelonData(rawMelonData) {
+    for (let song of rawMelonData.response.HITSSONGLIST) {
+        delete song.PLAYTIME;
+        delete song.ISMV;
+        delete song.ISADULT;
+        delete song.ISFREE;
+        delete song.ISHITSONG;
+        delete song.ISHOLDBACK;
+        delete song.ISTITLESONG;
+        delete song.ISSERVICE;
+        delete song.ISTRACKZERO;
+        delete song.CTYPE;
+        delete song.CONTSTYPECODE;
+    };
+}
+
+function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
+    for (let commentThread of rawYoutubeCommentThreadData.data.items[0]) {
+        let commentThreadSnippet = commentThread.snippet;
+        delete commentThreadSnippet.videoId;
+        delete commentThreadSnippet.canReply;
+        delete commentThreadSnippet.isPublic;
+        let commentSnippet = commentThreadSnippet.topLevelComment.snippet;
+        delete commentSnippet.videoId;
+        delete commentSnippet.textDisplay;
+        delete commentSnippet.authorDisplayName;
+        delete commentSnippet.authorProfileImageUrl;
+        delete commentSnippet.authorChannelUrl;
+        delete commentSnippet.canRate;
+        delete commentSnippet.viewerRating;
+    }
+}
+
 (async () => {
     let rawMelonData = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
+    optimizeMelonData(rawMelonData);
     let date = new Date();
     await fs.outputJSON(melonDataPath(date), rawMelonData);
     console.log(`Downloaded Melon chart to ${melonDataPath(date)}.`);
@@ -38,7 +72,7 @@ let getJSON = bent("json");
         let searchedVideos = rawYoutubeSearchData.data.items;
         let rawYoutubeVideoData = await youtube.videos.list({
             auth: process.env.YOUTUBE_API_KEY,
-            part: ["contentDetails", "id", "liveStreamingDetails", "localizations", "player", "recordingDetails", "snippet", "statistics", "status", "topicDetails"],
+            part: ["contentDetails", "id", "statistics"],
             id: searchedVideos.map(video => video.id.videoId)
         });
         await fs.outputJSON(youtubeVideoDataPath(date, query), rawYoutubeVideoData);
@@ -62,6 +96,7 @@ let getJSON = bent("json");
                         pageToken,
                         maxResults: 100
                     });
+                    optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData);
                     await fs.outputJSON(youtubeCommentThreadDataPath(date, videoId, index), rawYoutubeCommentThreadData);
                     let commentThreads = rawYoutubeCommentThreadData.data.items;
                     for (let commentThread of commentThreads) {
