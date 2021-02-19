@@ -15,22 +15,9 @@ let {
     youtubeCommentThreadDataPath,
     youtubeCommentThreadCacheDataPath
 } = require("../src/path.js");
+let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 
 let getJSON = bent("json");
-
-function hasKoreanLetter(comment) {
-    for (let index = 0; index < comment.length; ++index) {
-        let unicode = comment.charCodeAt(index);
-        if ((0xAC00 <= unicode && unicode <= 0xD7A3)
-            || (0x1100 <= unicode && unicode <= 0x11FF)
-            || (0x3130 <= unicode && unicode <= 0x318F)
-            || (0xA960 <= unicode && unicode <= 0xA97F)
-            || (0xD7B0 <= unicode && unicode <= 0xD7FF)) {
-            return true;
-        }
-    }
-    return false;
-}
 
 (async () => {
     let rawMelonData = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
@@ -61,7 +48,8 @@ function hasKoreanLetter(comment) {
             let pageToken;
             let lastDate = date;
             let index = 0;
-            let videoCommentsCache = {};
+            let recentCommentCount = 0;
+            let recentKoreanCommentCount = 0;
 
             do {
                 console.log(`Downloading YouTube comment thread ${index + 1} from ${formatDate(lastDate)} for video ${videoId}.`);
@@ -76,18 +64,15 @@ function hasKoreanLetter(comment) {
                     });
                     await fs.outputJSON(youtubeCommentThreadDataPath(date, videoId, index), rawYoutubeCommentThreadData);
                     let commentThreads = rawYoutubeCommentThreadData.data.items;
-
-                    let recentCommentCount = 0, recentKoreanCommentCount = 0;
-                    commentThreads.map(comment => {
-                        let commentSnippet = comment.snippet.topLevelComment.snippet;
-                        if (differenceInMinutes(date, new Date(commentSnippet.publishedAt)) < 30) {
+                    for (let commentThread of commentThreads) {
+                        let comment = commentThread.snippet.topLevelComment;
+                        if (differenceInMinutes(date, new Date(comment.publishedAt)) < 30) {
                             recentCommentCount += 1;
-                            if (hasKoreanLetter(commentSnippet.textOriginal)) {
+                            if (hasKoreanLetter(comment.textOriginal)) {
                                 recentKoreanCommentCount += 1;
                             }
                         }
-                    });
-                    videoCommentsCache["recentCommentInfo"] = { "total": recentCommentCount, "korean": recentKoreanCommentCount };
+                    }
                     if (!commentThreads.length) { break; }
                     let lastCommentThread = commentThreads[commentThreads.length - 1];
                     lastDate = new Date(lastCommentThread.snippet.topLevelComment.snippet.publishedAt);
@@ -102,30 +87,28 @@ function hasKoreanLetter(comment) {
                 }
             } while (pageToken && differenceInMinutes(date, lastDate) < 30)
 
-            let totalCommentCount = 0, totalKoreanCommentCount = 0;
+            let totalCommentCount = 0;
+            let totalKoreanCommentCount = 0;
             await Promise.all([...Array(2 * (60 / 30) * 24).keys()].map(async prev => {
                 let prevDate = new Date(date.getTime() - prev * 1000 * 60 * 30);
-                let path = youtubeCommentThreadCacheDataPath(prevDate, videoId);
                 try {
-                    let data = await fs.readFile(path);
-                    data = JSON.parse(data);
-                    if (data.hasOwnProperty("recentCommentInfo")) {
-                        totalCommentCount += data["recentCommentInfo"]["total"];
-                        totalKoreanCommentCount += data["recentCommentInfo"]["korean"];
-                    }
+                    let { recentCommentInfo } = await readJSONFile(youtubeCommentThreadCacheDataPath(prevDate, videoId));
+                    totalCommentCount += recentCommentInfo.total;
+                    totalKoreanCommentCount += recentCommentInfo.korean;
                 } catch (error) {
                     if (error.code != "ENOENT") {
                         throw error;
                     }
                 }
             }));
-            videoCommentsCache["totalCommentInfo"] = { "total": totalCommentCount, "korean": totalKoreanCommentCount };
+            totalCommentCount += recentCommentCount;
+            totalKoreanCommentCount += recentKoreanCommentCount;
 
-            if (Object.keys(videoCommentsCache).length >= 2) {
-                videoCommentsCache["totalCommentInfo"]["total"] += videoCommentsCache["recentCommentInfo"]["total"];
-                videoCommentsCache["totalCommentInfo"]["korean"] += videoCommentsCache["recentCommentInfo"]["korean"];
-                await fs.outputJSON(youtubeCommentThreadCacheDataPath(date, videoId), videoCommentsCache);
-            }
+            let youtubeCommentThreadCache = {
+                totalCommentInfo: { total: totalCommentCount, korean: totalKoreanCommentCount },
+                recentCommentInfo: { total: recentCommentCount, korean: recentKoreanCommentCount }
+            };
+            await fs.outputJSON(youtubeCommentThreadCacheDataPath(date, videoId), youtubeCommentThreadCache);
         }));
     }));
     console.log(`Downloaded YouTube data to ${youtubeDataPath(date)}.`);

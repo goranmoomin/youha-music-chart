@@ -1,13 +1,11 @@
 let fs = require("fs").promises;
-let { melonDataPath,
-      youtubeVideoDataPath,
-      youtubeCommentThreadCacheDataPath } = require("./path.js");
+let {
+    melonDataPath,
+    youtubeVideoDataPath,
+    youtubeCommentThreadCacheDataPath
+} = require("./path.js");
+let { readJSONFile } = require("./helpers.js");
 
-async function readJSONFile(path) {
-    let data = await fs.readFile(path);
-    let json = JSON.parse(data);
-    return json;
-}
 
 async function getMelonChart(date) {
     let path = melonDataPath(date);
