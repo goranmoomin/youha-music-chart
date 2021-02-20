@@ -22,10 +22,9 @@ async function getYoutubeStatistics(date, query) {
 async function getKoreanCommentRate(date, videoId) {
     let path = youtubeCommentThreadCacheDataPath(date, videoId);
     try {
-        let json = await readJSONFile(path);
-        let info = json["totalCommentInfo"];
-        if (info["total"] == 0) { return null; }
-        return info["korean"] / info["total"];
+        let { totalCommentInfo: { total, korean } } = await readJSONFile(path);
+        if (total == 0) { return null; }
+        return korean / total;
     } catch (error) {
         if (error.code != "ENOENT") {
             throw error;
