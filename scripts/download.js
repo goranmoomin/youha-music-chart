@@ -4,11 +4,14 @@ let fs = require("fs-extra");
 let bent = require("bent");
 let { google } = require("googleapis");
 let youtube = google.youtube("v3");
-let { differenceInMinutes } = require("date-fns");
+let {
+    zonedTimeToUtc,
+    differenceInMinutes
+} = require("date-fns-tz");
 
 let {
     formatDate,
-    melonDataPath,
+    melonChartPath,
     youtubeDataPath,
     youtubeVideoDataPath,
     youtubeSearchDataPath,
@@ -19,20 +22,17 @@ let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 
 let getJSON = bent("json");
 
-function optimizeMelonData(rawMelonData) {
-    for (let song of rawMelonData.response.HITSSONGLIST) {
-        delete song.PLAYTIME;
-        delete song.ISMV;
-        delete song.ISADULT;
-        delete song.ISFREE;
-        delete song.ISHITSONG;
-        delete song.ISHOLDBACK;
-        delete song.ISTITLESONG;
-        delete song.ISSERVICE;
-        delete song.ISTRACKZERO;
-        delete song.CTYPE;
-        delete song.CONTSTYPECODE;
-    };
+function formatMelonChart(melonChartResponse) {
+    let day = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
+    let hour = melonChartResponse.response.RANKHOUR.split(":").map(s => Number.parseInt(s));
+    let date = zonedTimeToUtc(Date(...day, ...hour), "Asia/Seoul");
+    let items = melonChartResponse.response.HITSSONGLIST.map(song => ({
+        id: song.SONGID,
+        name: song.SONGNAME,
+        artistNames: song.ARTISTLIST.map(artist => artist.ARTISTNAME),
+        albumImgUrl: song.ALBUMIMG
+    }));
+    return { date, items };
 }
 
 function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
@@ -53,15 +53,14 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
 }
 
 (async () => {
-    let rawMelonData = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
-    optimizeMelonData(rawMelonData);
+    let melonChartResponse = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
+    let melonChart = formatMelonChart(melonChartResponse);
     let date = new Date();
-    await fs.outputJSON(melonDataPath(date), rawMelonData);
-    console.log(`Downloaded Melon chart to ${melonDataPath(date)}.`);
-    let melonChartList = rawMelonData.response.HITSSONGLIST;
-    await Promise.all(melonChartList.map(async song => {
-        let name = song.SONGNAME;
-        let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
+    await fs.outputJSON(melonChartPath(date), melonChart);
+    console.log(`Downloaded Melon chart to ${melonChartPath(date)}.`);
+    await Promise.all(melonChart.items.map(async song => {
+        let name = song.name;
+        let query = `${song.name} ${song.artistNames.join(" ")}`;
         let rawYoutubeSearchData = await youtube.search.list({
             auth: process.env.YOUTUBE_API_KEY,
             part: "id",

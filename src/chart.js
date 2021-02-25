@@ -1,16 +1,16 @@
 let fs = require("fs").promises;
 let {
-    melonDataPath,
+    melonChartPath,
     youtubeVideoDataPath,
     youtubeCommentThreadCacheDataPath
 } = require("./path.js");
 let { readJSONFile } = require("./helpers.js");
 
 
-async function getMelonChart(date) {
-    let path = melonDataPath(date);
-    let { response: { HITSSONGLIST: melonChartList } } = await readJSONFile(path);
-    return melonChartList;
+async function getMelonChartItems(date) {
+    let path = melonChartPath(date);
+    let { items } = await readJSONFile(path);
+    return items;
 }
 
 async function getYoutubeStatistics(date, query) {
@@ -33,16 +33,15 @@ async function getKoreanCommentRate(date, videoId) {
     }
 }
 
-async function getSortedChart(date) {
+async function getSortedChartItems(date) {
     let pastDate = new Date(date.getTime() - 900000);
-    let melonChartList = await getMelonChart(date);
+    let melonChart = await getMelonChartItems(date);
     let musicScores = new Map();
 
-    for (let song of melonChartList) {
+    for (let song of melonChart) {
         let videoCounts = new Map();
-        let name = song.SONGNAME;
-        let query = `${song.SONGNAME} ${song.ARTISTLIST.map(artist => artist.ARTISTNAME).join(" ")}`;
-
+        let name = song.name;
+        let query = `${song.name} ${song.artistNames.join(" ")}`;
         let currentStatistics = await getYoutubeStatistics(date, query);
         let pastStatistics;
         try {
@@ -75,14 +74,13 @@ async function getSortedChart(date) {
     }
 
     let chart = [...musicScores].sort((a, b) => -(a[1] - b[1])).map(([name, score]) => ({
-        name,
         score,
-        melonData: melonChartList.find(song => song.SONGNAME == name),
+        ...melonChart.find(song => song.name == name)
     }));
     return chart;
 }
 
 module.exports = {
-    getMelonChart,
-    getSortedChart
+    getMelonChartItems,
+    getSortedChartItems
 };

@@ -5,7 +5,7 @@ function formatDate(date) {
     return format(date, "yyyy.MM.dd.HH:mm");
 }
 
-function melonDataPath(date) {
+function melonChartPath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
     date.setMinutes(0);
     let path = `charts/chart-${format(date, "yyyy.MM.dd.HH:mm")}.json`;
@@ -41,7 +41,7 @@ function youtubeCommentThreadCacheDataPath(date, videoId) {
 
 module.exports = {
     formatDate,
-    melonDataPath,
+    melonChartPath,
     youtubeDataPath,
     youtubeVideoDataPath,
     youtubeSearchDataPath,
