@@ -1,7 +1,7 @@
 let fs = require("fs").promises;
 let {
     melonChartPath,
-    youtubeVideoDataPath,
+    youtubeSearchResultPath,
     youtubeCommentThreadCacheDataPath
 } = require("./path.js");
 let { readJSONFile } = require("./helpers.js");
@@ -13,10 +13,10 @@ async function getMelonChartItems(date) {
     return items;
 }
 
-async function getYoutubeStatistics(date, query) {
-    let path = youtubeVideoDataPath(date, query);
-    let { data: youtubeData } = await readJSONFile(path);
-    return youtubeData;
+async function getYoutubeVideos(date, query) {
+    let path = youtubeSearchResultPath(date, query);
+    let { items } = await readJSONFile(path);
+    return items;
 }
 
 async function getKoreanCommentRate(date, videoId) {
@@ -34,7 +34,7 @@ async function getKoreanCommentRate(date, videoId) {
 }
 
 async function getSortedChartItems(date) {
-    let pastDate = new Date(date.getTime() - 900000);
+    let pastDate = new Date(date.getTime() - 1800000);
     let melonChart = await getMelonChartItems(date);
     let musicScores = new Map();
 
@@ -42,10 +42,10 @@ async function getSortedChartItems(date) {
         let videoCounts = new Map();
         let name = song.name;
         let query = `${song.name} ${song.artistNames.join(" ")}`;
-        let currentStatistics = await getYoutubeStatistics(date, query);
-        let pastStatistics;
+        let currentVideos = await getYoutubeVideos(date, query).items;
+        let pastVideos;
         try {
-            pastStatistics = await getYoutubeStatistics(pastDate, query);
+            pastVideos = await getYoutubeVideos(pastDate, query);
         } catch (e) {
             if (e.code == "ENOENT") {
                 continue;
@@ -53,13 +53,13 @@ async function getSortedChartItems(date) {
             throw e;
         }
 
-        let commonIds = currentStatistics.items.slice(0, 5).map(item => item.id)
-            .filter(id => pastStatistics.items.slice(0, 5).some(item => item.id == id));
+        let commonIds = currentVideos.slice(0, 5).map(item => item.id)
+            .filter(id => pastVideos.slice(0, 5).some(item => item.id == id));
 
         let score = 0, exceptionCount = 0;
         for (let id of commonIds) {
-            let currentViewCount = currentStatistics.items.find(item => item.id == id).statistics.viewCount;
-            let pastViewCount = pastStatistics.items.find(item => item.id == id).statistics.viewCount;
+            let currentViewCount = currentVideos.find(item => item.id == id).viewCount;
+            let pastViewCount = pastVideos.find(item => item.id == id).viewCount;
             let koreanCommentRate = await getKoreanCommentRate(date, id);
             if (koreanCommentRate == null) {
                 exceptionCount += 1;

@@ -12,39 +12,33 @@ function melonChartPath(date) {
     return path;
 }
 
-function youtubeDataPath(date) {
+function youtubePath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
     date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
-    let path = `charts/youtube-data-${format(date, "yyyy.MM.dd.HH:mm")}`;
+    let path = `charts/youtube-${format(date, "yyyy.MM.dd.HH:mm")}`;
     return path;
 }
 
-function youtubeVideoDataPath(date, query) {
-    let path = `${youtubeDataPath(date)}/video-list-response-${query}.json`;
-    return path;
-}
-
-function youtubeSearchDataPath(date, query) {
-    let path = `${youtubeDataPath(date)}/search-list-response-${query}.json`;
+function youtubeSearchResultPath(date, query) {
+    let path = `${youtubePath(date)}/videos-${query}.json`;
     return path;
 }
 
 function youtubeCommentThreadDataPath(date, videoId, index) {
-    let path = `${youtubeDataPath(date)}/comment-thread-list-response-${videoId}-${index}.json`;
+    let path = `${youtubePath(date)}/comment-thread-list-response-${videoId}-${index}.json`;
     return path;
 }
 
 function youtubeCommentThreadCacheDataPath(date, videoId) {
-    let path = `${youtubeDataPath(date)}/comment-thread-cache-${videoId}.json`;
+    let path = `${youtubePath(date)}/comment-thread-cache-${videoId}.json`;
     return path;
 }
 
 module.exports = {
     formatDate,
     melonChartPath,
-    youtubeDataPath,
-    youtubeVideoDataPath,
-    youtubeSearchDataPath,
+    youtubePath,
+    youtubeSearchResultPath,
     youtubeCommentThreadDataPath,
     youtubeCommentThreadCacheDataPath
 };

@@ -12,9 +12,8 @@ let {
 let {
     formatDate,
     melonChartPath,
-    youtubeDataPath,
-    youtubeVideoDataPath,
-    youtubeSearchDataPath,
+    youtubePath,
+    youtubeSearchResultPath,
     youtubeCommentThreadDataPath,
     youtubeCommentThreadCacheDataPath
 } = require("../src/path.js");
@@ -34,6 +33,14 @@ function formatMelonChart(melonChartResponse) {
     }));
     return { date, items };
 }
+
+function formatYoutubeVideo({ id, statistics }) {
+    let { viewCount, likeCount, dislikeCount, favoriteCount, commentCount } = statistics;
+    return {
+        id, viewCount, likeCount, dislikeCount, favoriteCount, commentCount
+    };
+}
+
 
 function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
     for (let commentThread of rawYoutubeCommentThreadData.data.items[0]) {
@@ -61,22 +68,22 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
     await Promise.all(melonChart.items.map(async song => {
         let name = song.name;
         let query = `${song.name} ${song.artistNames.join(" ")}`;
-        let rawYoutubeSearchData = await youtube.search.list({
+        let youtubeSearchResponse = await youtube.search.list({
             auth: process.env.YOUTUBE_API_KEY,
             part: "id",
             q: query,
             maxResults: 50
         });
-        await fs.outputJSON(youtubeSearchDataPath(date, query), rawYoutubeSearchData);
-        let searchedVideos = rawYoutubeSearchData.data.items;
-        let rawYoutubeVideoData = await youtube.videos.list({
+        let youtubeVideosResponse = await youtube.videos.list({
             auth: process.env.YOUTUBE_API_KEY,
             part: ["contentDetails", "id", "statistics"],
-            id: searchedVideos.map(video => video.id.videoId)
+            id: youtubeSearchResponse.data.items.map(video => video.id.videoId)
         });
-        await fs.outputJSON(youtubeVideoDataPath(date, query), rawYoutubeVideoData);
+        let youtubeSearchResult = { items: youtubeVideosResponse.map(formatYoutubeVideo) };
+        await fs.outputJSON(youtubeSearchResultPath(date, query), youtubeSearchResult);
+        let youtubeVideos = youtubeSearchResult.items;
 
-        await Promise.all(searchedVideos.slice(0, 5).map(video => video.id.videoId).map(async videoId => {
+        await Promise.all(youtubeVideos.slice(0, 5).map(async ({ id: videoId }) => {
             console.log(`Downloading YouTube comments for video ${videoId}.`);
             let pageToken;
             let lastDate = date;
@@ -145,5 +152,5 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
             await fs.outputJSON(youtubeCommentThreadCacheDataPath(date, videoId), youtubeCommentThreadCache);
         }));
     }));
-    console.log(`Downloaded YouTube data to ${youtubeDataPath(date)}.`);
+    console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
 })();
