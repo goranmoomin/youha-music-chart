@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-let fs = require("fs").promises;
+let fs = require("fs-extra");
 
 async function readJSONFile(path) {
     let data = await fs.readFile(path);
