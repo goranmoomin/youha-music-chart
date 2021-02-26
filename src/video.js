@@ -1,6 +1,5 @@
 function videoAnalysisDuration(date, video) {
     let properDuration;
-    
     let uploadedDate = new Date(video.publishedAt);
     let uploadedDuration = date.getTime() - uploadedDate.getTime();
     let fourDaysDuration = 4 * 24 * 60 * 60 * 1000;

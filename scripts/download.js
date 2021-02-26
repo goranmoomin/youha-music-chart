@@ -44,13 +44,13 @@ function formatYoutubeVideo({ id, snippet, statistics }) {
     };
 }
 
-function formatYoutubeComment({ id, snippet }) {
+function formatYoutubeCommentThread({ id, snippet }) {
     try {
-        let commentInfo = snippet.topLevelComment.snippet;
-        let text = commentInfo.textOriginal;
-        let date = commentInfo.publishedAt;
-        let likeCount = commentInfo.likeCount;
-        let authorId = (commentInfo.authorChannelId == undefined) ? undefined : commentInfo.authorChannelId.value;
+        let commentSnippet = snippet.topLevelComment.snippet;
+        let text = commentSnippet.textOriginal;
+        let date = commentSnippet.publishedAt;
+        let likeCount = commentSnippet.likeCount;
+        let authorId = commentSnippet.authorChannelId && commentSnippet.authorChannelId.value;
         return {
             id, text, date, likeCount, authorId
         };
@@ -59,24 +59,7 @@ function formatYoutubeComment({ id, snippet }) {
     }
 }
 
-function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
-    for (let commentThread of rawYoutubeCommentThreadData.data.items[0]) {
-        let commentThreadSnippet = commentThread.snippet;
-        delete commentThreadSnippet.videoId;
-        delete commentThreadSnippet.canReply;
-        delete commentThreadSnippet.isPublic;
-        let commentSnippet = commentThreadSnippet.topLevelComment.snippet;
-        delete commentSnippet.videoId;
-        delete commentSnippet.textDisplay;
-        delete commentSnippet.authorDisplayName;
-        delete commentSnippet.authorProfileImageUrl;
-        delete commentSnippet.authorChannelUrl;
-        delete commentSnippet.canRate;
-        delete commentSnippet.viewerRating;
-    }
-}
-
-function blockIndexOf(date) {
+function blockIndex(date) {
     return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
@@ -110,10 +93,10 @@ function blockIndexOf(date) {
             let videoId = video.id;
             console.log(`Downloading YouTube comments for video ${videoId}.`);
             let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
-            let curDate = oldestUntrackedDate;
-            for (let curDate = oldestUntrackedDate; curDate.getTime() <= date.getTime(); curDate = new Date(curDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
+            let currentDate = oldestUntrackedDate;
+            for (let currentDate = oldestUntrackedDate; currentDate.getTime() <= date.getTime(); currentDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
                 try {
-                    await fs.readFile(youtubeCommentsDataPath(curDate, videoId));
+                    await fs.readFile(youtubeCommentsDataPath(currentDate, videoId));
                 } catch (error) {
                     if (error.code == "ENOENT") {
                         break;
@@ -129,7 +112,7 @@ function blockIndexOf(date) {
             do {
                 console.log(`Downloading YouTube comment thread from ${formatDate(lastDate)} for video ${videoId}.`);
                 try {
-                    let rawYoutubeCommentThreadData = await youtube.commentThreads.list({
+                    let youtubeCommentThreadsResponse = await youtube.commentThreads.list({
                         auth: process.env.YOUTUBE_API_KEY,
                         part: ["id", "replies", "snippet"],
                         videoId,
@@ -137,20 +120,20 @@ function blockIndexOf(date) {
                         pageToken,
                         maxResults: 100
                     });
-                    let commentThreads = rawYoutubeCommentThreadData.data.items;
-                    let curPageComments = commentThreads.map(formatYoutubeComment);
+                    let youtubeCommentThreads = youtubeCommentThreadsResponse.data.items;
+                    let currentPageComments = youtubeCommentThreads.map(formatYoutubeCommentThread);
 
-                    for (let comment of curPageComments) {
+                    for (let comment of currentPageComments) {
                         let commentWrittenDate = new Date(comment.date);
-                        if (blockIndexOf(date) > blockIndexOf(commentWrittenDate)
-                            && blockIndexOf(commentWrittenDate) >= blockIndexOf(oldestUntrackedDate)) {
+                        if (blockIndex(date) > blockIndex(commentWrittenDate)
+                            && blockIndex(commentWrittenDate) >= blockIndex(oldestUntrackedDate)) {
                             comments.push(comment);
                         }
                     }
-                    if (!commentThreads.length) { break; }
-                    let lastCommentThread = commentThreads[commentThreads.length - 1];
-                    lastDate = new Date(lastCommentThread.snippet.topLevelComment.snippet.publishedAt);
-                    pageToken = rawYoutubeCommentThreadData.data.nextPageToken;
+                    if (!youtubeCommentThreads.length) { break; }
+                    let lastYoutubeCommentThread = youtubeCommentThreads[youtubeCommentThreads.length - 1];
+                    lastDate = new Date(lastYoutubeCommentThread.snippet.topLevelComment.snippet.publishedAt);
+                    pageToken = youtubeCommentThreadsResponse.data.nextPageToken;
                 } catch(e) {
                     if (e.message === `The video identified by the <code><a href="/youtube/v3/docs/commentThreads/list#videoId">videoId</a></code> parameter has disabled comments.`) {
                         console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
@@ -158,31 +141,31 @@ function blockIndexOf(date) {
                     }
                     throw e;
                 }
-            } while (pageToken && blockIndexOf(lastDate) >= blockIndexOf(oldestUntrackedDate))
+            } while (pageToken && blockIndex(lastDate) >= blockIndex(oldestUntrackedDate))
 
-            let curBlockStartIndex = 0, curCommentIndex = 0;
-            for (let curBlockIndex = blockIndexOf(date) - 1; curBlockIndex >= blockIndexOf(oldestUntrackedDate); --curBlockIndex) {
-                while (curCommentIndex < comments.length
-                       && blockIndexOf(new Date(comments[curCommentIndex].date)) == curBlockIndex) { ++curCommentIndex; }
-                await fs.outputJSON(youtubeCommentsDataPath(new Date(curBlockIndex * dataRefreshPeriod * 60 * 1000), videoId),
-                                    { items: comments.slice(curBlockStartIndex, curCommentIndex) });
-                curBlockStartIndex = curCommentIndex + 1;
-                curCommentIndex = curBlockStartIndex;
+            let currentBlockStartIndex = 0, currentCommentIndex = 0;
+            for (let currentBlockIndex = blockIndex(date) - 1; currentBlockIndex >= blockIndex(oldestUntrackedDate); --currentBlockIndex) {
+                while (currentCommentIndex < comments.length
+                       && blockIndex(new Date(comments[currentCommentIndex].date)) == currentBlockIndex) { ++currentCommentIndex; }
+                await fs.outputJSON(youtubeCommentsDataPath(new Date(currentBlockIndex * dataRefreshPeriod * 60 * 1000), videoId),
+                                    { items: comments.slice(currentBlockStartIndex, currentCommentIndex) });
+                currentBlockStartIndex = currentCommentIndex + 1;
+                currentCommentIndex = currentBlockStartIndex;
             }
 
-            await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
-                let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000); 
+            await Promise.all([...Array(blockIndex(date) - blockIndex(oldestUntrackedDate)).keys()].map(async index => {
+                let currentDate = new Date((blockIndex(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
                 try {
-                    let { items: curComments } = await readJSONFile(youtubeCommentsDataPath(curDate, videoId));
-                    let curBlockCommentCount = curComments.length;
-                    let curBlockKoreanCommentCount = 0;
-                    for (let comment of curComments) {
+                    let { items: currentComments } = await readJSONFile(youtubeCommentsDataPath(currentDate, videoId));
+                    let currentBlockCommentCount = currentComments.length;
+                    let currentBlockKoreanCommentCount = 0;
+                    for (let comment of currentComments) {
                         if (hasKoreanLetter(comment.text)) {
-                            ++curBlockKoreanCommentCount;
+                            ++currentBlockKoreanCommentCount;
                         }
                     }
-                    let curBlockCommentInfo = { total: curBlockCommentCount, korean: curBlockKoreanCommentCount }; 
-                    await fs.outputJSON(youtubeCommentsCacheDataPath(curDate, videoId), curBlockCommentInfo);
+                    let currentBlockCommentInfo = { total: currentBlockCommentCount, korean: currentBlockKoreanCommentCount };
+                    await fs.outputJSON(youtubeCommentsCacheDataPath(currentDate, videoId), currentBlockCommentInfo);
                 } catch (error) {
                     throw error;
                 }

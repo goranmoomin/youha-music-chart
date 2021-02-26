@@ -8,7 +8,7 @@ let { readJSONFile } = require("./helpers.js");
 let { videoAnalysisDuration } = require("./video.js");
 let { dataRefreshPeriod } = require("./helpers.js");
 
-function blockIndexOf(date) {
+function blockIndex(date) {
     return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
@@ -28,9 +28,9 @@ async function getKoreanCommentRate(date, video) {
     let videoId = video.id;
     let totalCommentCount = 0, totalKoreanCommentCount = 0;
     let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
-    await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
-        let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
-        let path = youtubeCommentsCacheDataPath(curDate, videoId);
+    await Promise.all([...Array(blockIndex(date) - blockIndex(oldestUntrackedDate)).keys()].map(async index => {
+        let date = new Date((blockIndex(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
+        let path = youtubeCommentsCacheDataPath(date, videoId);
         try {
             let { total, korean } = await readJSONFile(path);
             totalCommentCount += total;
