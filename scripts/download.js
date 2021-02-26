@@ -14,11 +14,12 @@ let {
     melonChartPath,
     youtubePath,
     youtubeSearchResultPath,
-    youtubeCommentThreadDataPath,
-    youtubeCommentThreadCacheDataPath
+    youtubeCommentsDataPath,
+    youtubeCommentsCacheDataPath,
+    chartCachePath
 } = require("../src/path.js");
 let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
-
+let { videoAnalysisDuration } = require("../src/video.js");
 let getJSON = bent("json");
 
 function formatMelonChart(melonChartResponse) {
@@ -34,13 +35,28 @@ function formatMelonChart(melonChartResponse) {
     return { date, items };
 }
 
-function formatYoutubeVideo({ id, statistics }) {
+function formatYoutubeVideo({ id, snippet, statistics }) {
     let { viewCount, likeCount, dislikeCount, favoriteCount, commentCount } = statistics;
+    let { publishedAt } = snippet;
     return {
-        id, viewCount, likeCount, dislikeCount, favoriteCount, commentCount
+        id, publishedAt, viewCount, likeCount, dislikeCount, favoriteCount, commentCount
     };
 }
 
+function formatYoutubeComment({ id, snippet }) {
+    try {
+        let commentInfo = snippet.topLevelComment.snippet;
+        let text = commentInfo.textOriginal;
+        let date = commentInfo.publishedAt;
+        let likeCount = commentInfo.likeCount;
+        let authorId = (commentInfo.authorChannelId == undefined) ? undefined : commentInfo.authorChannelId.value;
+        return {
+            id, text, date, likeCount, authorId
+        };
+    } catch (e) {
+        throw e;
+    }
+}
 
 function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
     for (let commentThread of rawYoutubeCommentThreadData.data.items[0]) {
@@ -59,7 +75,12 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
     }
 }
 
+function blockIndexOf(date) {
+    return Math.floor(date.getTime() / (30 * 60 * 1000));
+}
+
 (async () => {
+    let chartCache = {};
     let melonChartResponse = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
     let melonChart = formatMelonChart(melonChartResponse);
     let date = new Date();
@@ -76,23 +97,37 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
         });
         let youtubeVideosResponse = await youtube.videos.list({
             auth: process.env.YOUTUBE_API_KEY,
-            part: ["contentDetails", "id", "statistics"],
+            part: ["contentDetails", "id", "snippet", "statistics"],
             id: youtubeSearchResponse.data.items.map(video => video.id.videoId)
         });
-        let youtubeSearchResult = { items: youtubeVideosResponse.map(formatYoutubeVideo) };
+
+        let youtubeSearchResult = { items: youtubeVideosResponse.data.items.map(formatYoutubeVideo) };
         await fs.outputJSON(youtubeSearchResultPath(date, query), youtubeSearchResult);
         let youtubeVideos = youtubeSearchResult.items;
 
-        await Promise.all(youtubeVideos.slice(0, 5).map(async ({ id: videoId }) => {
+        await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
+            let videoId = video.id;
             console.log(`Downloading YouTube comments for video ${videoId}.`);
+            console.log(videoAnalysisDuration(date, video));
+            let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
+            let curDate = oldestUntrackedDate;
+            for (let curDate = oldestUntrackedDate; curDate.getTime() <= date.getTime(); curDate = new Date(curDate.getTime() + 30 * 60 * 1000)) {
+                try {
+                    await fs.readFile(youtubeCommentsDataPath(curDate, videoId));
+                } catch (error) {
+                    if (error.code == "ENOENT") {
+                        break;
+                    } else {
+                        throw error;
+                    }
+                }
+            }
+
             let pageToken;
             let lastDate = date;
-            let index = 0;
-            let recentCommentCount = 0;
-            let recentKoreanCommentCount = 0;
-
+            let comments = [];
             do {
-                console.log(`Downloading YouTube comment thread ${index + 1} from ${formatDate(lastDate)} for video ${videoId}.`);
+                console.log(`Downloading YouTube comment thread from ${formatDate(lastDate)} for video ${videoId}.`);
                 try {
                     let rawYoutubeCommentThreadData = await youtube.commentThreads.list({
                         auth: process.env.YOUTUBE_API_KEY,
@@ -102,23 +137,25 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
                         pageToken,
                         maxResults: 100
                     });
-                    optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData);
-                    await fs.outputJSON(youtubeCommentThreadDataPath(date, videoId, index), rawYoutubeCommentThreadData);
+                    // optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData);
+                    // await fs.outputJSON(youtubeCommentsDataPath(date, videoId, index), rawYoutubeCommentThreadData);
                     let commentThreads = rawYoutubeCommentThreadData.data.items;
-                    for (let commentThread of commentThreads) {
-                        let comment = commentThread.snippet.topLevelComment;
-                        if (differenceInMinutes(date, new Date(comment.publishedAt)) < 30) {
-                            recentCommentCount += 1;
-                            if (hasKoreanLetter(comment.textOriginal)) {
-                                recentKoreanCommentCount += 1;
-                            }
+                    let curPageComments = commentThreads.map(formatYoutubeComment);
+                    // console.log(curPageComments);
+                    for (let comment of curPageComments) {
+                        let commentWrittenDate = new Date(comment.date);
+                        // console.log('current: ', blockIndexOf(date));
+                        // console.log('publishedAt: ', blockIndexOf(commentWrittenDate));
+                        // console.log('oldestuntrackeddate: ', blockIndexOf(oldestUntrackedDate));
+                        if (blockIndexOf(date) > blockIndexOf(commentWrittenDate)
+                            && blockIndexOf(commentWrittenDate) >= blockIndexOf(oldestUntrackedDate)) {
+                            comments.push(comment);
                         }
                     }
                     if (!commentThreads.length) { break; }
                     let lastCommentThread = commentThreads[commentThreads.length - 1];
                     lastDate = new Date(lastCommentThread.snippet.topLevelComment.snippet.publishedAt);
                     pageToken = rawYoutubeCommentThreadData.data.nextPageToken;
-                    index += 1;
                 } catch(e) {
                     if (e.message === `The video identified by the <code><a href="/youtube/v3/docs/commentThreads/list#videoId">videoId</a></code> parameter has disabled comments.`) {
                         console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
@@ -126,30 +163,37 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
                     }
                     throw e;
                 }
-            } while (pageToken && differenceInMinutes(date, lastDate) < 30)
+            } while (pageToken && blockIndexOf(lastDate) >= blockIndexOf(oldestUntrackedDate))
 
-            let totalCommentCount = 0;
-            let totalKoreanCommentCount = 0;
-            await Promise.all([...Array(2 * (60 / 30) * 24).keys()].map(async prev => {
-                let prevDate = new Date(date.getTime() - prev * 1000 * 60 * 30);
+            // console.log(comments);
+
+            let curBlockStartIndex = 0, curCommentIndex = 0;
+            for (let curBlockIndex = blockIndexOf(date) - 1; curBlockIndex >= blockIndexOf(oldestUntrackedDate); --curBlockIndex) {
+                while (curCommentIndex < comments.length
+                       && blockIndexOf(new Date(comments[curCommentIndex].date)) == curBlockIndex) { ++curCommentIndex; }
+                await fs.outputJSON(youtubeCommentsDataPath(new Date(curBlockIndex * 30 * 60 * 1000), videoId),
+                                    { items: comments.slice(curBlockStartIndex, curCommentIndex) });
+                curBlockStartIndex = curCommentIndex + 1;
+                curCommentIndex = curBlockStartIndex;
+            }
+
+            await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
+                let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * 30 * 60 * 1000); 
                 try {
-                    let { recentCommentInfo } = await readJSONFile(youtubeCommentThreadCacheDataPath(prevDate, videoId));
-                    totalCommentCount += recentCommentInfo.total;
-                    totalKoreanCommentCount += recentCommentInfo.korean;
-                } catch (error) {
-                    if (error.code != "ENOENT") {
-                        throw error;
+                    let { items: curComments } = await readJSONFile(youtubeCommentsDataPath(curDate, videoId));
+                    let curBlockCommentCount = curComments.length;
+                    let curBlockKoreanCommentCount = 0;
+                    for (let comment of curComments) {
+                        if (hasKoreanLetter(comment.text)) {
+                            ++curBlockKoreanCommentCount;
+                        }
                     }
+                    let curBlockCommentInfo = { total: curBlockCommentCount, korean: curBlockKoreanCommentCount }; 
+                    await fs.outputJSON(youtubeCommentsCacheDataPath(curDate, videoId), curBlockCommentInfo);
+                } catch (error) {
+                    throw error;
                 }
             }));
-            totalCommentCount += recentCommentCount;
-            totalKoreanCommentCount += recentKoreanCommentCount;
-
-            let youtubeCommentThreadCache = {
-                totalCommentInfo: { total: totalCommentCount, korean: totalKoreanCommentCount },
-                recentCommentInfo: { total: recentCommentCount, korean: recentKoreanCommentCount }
-            };
-            await fs.outputJSON(youtubeCommentThreadCacheDataPath(date, videoId), youtubeCommentThreadCache);
         }));
     }));
     console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);

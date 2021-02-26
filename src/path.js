@@ -24,13 +24,21 @@ function youtubeSearchResultPath(date, query) {
     return path;
 }
 
-function youtubeCommentThreadDataPath(date, videoId, index) {
-    let path = `${youtubePath(date)}/comment-thread-list-response-${videoId}-${index}.json`;
+
+function youtubeCommentsDataPath(date, videoId) {
+    let path = `${youtubePath(date)}/comments-list-response-${videoId}.json`;
     return path;
 }
 
-function youtubeCommentThreadCacheDataPath(date, videoId) {
-    let path = `${youtubePath(date)}/comment-thread-cache-${videoId}.json`;
+function youtubeCommentsCacheDataPath(date, videoId) {
+    let path = `${youtubePath(date)}/comments-cache-${videoId}.json`;
+    return path;
+}
+
+function chartCachePath(date) {
+    date = utcToZonedTime(date, "Asia/Seoul");
+    date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
+    let path = `charts/chart-cache-${format(date, "yyyy.MM.dd.HH:mm")}.json`;
     return path;
 }
 
@@ -39,6 +47,7 @@ module.exports = {
     melonChartPath,
     youtubePath,
     youtubeSearchResultPath,
-    youtubeCommentThreadDataPath,
-    youtubeCommentThreadCacheDataPath
+    youtubeCommentsDataPath,
+    youtubeCommentsCacheDataPath,
+    chartCachePath
 };

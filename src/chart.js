@@ -2,10 +2,14 @@ let fs = require("fs").promises;
 let {
     melonChartPath,
     youtubeSearchResultPath,
-    youtubeCommentThreadCacheDataPath
+    youtubeCommentsCacheDataPath
 } = require("./path.js");
 let { readJSONFile } = require("./helpers.js");
+let { videoAnalysisDuration } = require("./video.js");
 
+function blockIndexOf(date) {
+    return Math.floor(date.getTime() / (30 * 60 * 1000));
+}
 
 async function getMelonChartItems(date) {
     let path = melonChartPath(date);
@@ -19,22 +23,31 @@ async function getYoutubeVideos(date, query) {
     return items;
 }
 
-async function getKoreanCommentRate(date, videoId) {
-    let path = youtubeCommentThreadCacheDataPath(date, videoId);
-    try {
-        let { totalCommentInfo: { total, korean } } = await readJSONFile(path);
-        if (total == 0) { return null; }
-        return korean / total;
-    } catch (error) {
-        if (error.code != "ENOENT") {
-            throw error;
+async function getKoreanCommentRate(date, video) {
+    let videoId = video.id;
+    let totalCommentCount = 0, totalKoreanCommentCount = 0;
+    let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
+    await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
+        let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * 30 * 60 * 1000);
+        let path = youtubeCommentsCacheDataPath(curDate, videoId);
+        console.log(path);
+        try {
+            let { total, korean } = await readJSONFile(path);
+            totalCommentCount += total;
+            totalKoreanCommentCount += korean;
+        } catch (error) {
+            if (error.code != "ENOENT") {
+                throw error;
+            }
         }
-        return null;
-    }
+    }));
+
+    if (totalCommentCount == 0) { return undefined; }
+    return totalKoreanCommentCount / totalCommentCount;
 }
 
 async function getSortedChartItems(date) {
-    let pastDate = new Date(date.getTime() - 1800000);
+    let pastDate = new Date(date.getTime() - 30 * 60 * 1000);
     let melonChart = await getMelonChartItems(date);
     let musicScores = new Map();
 
@@ -42,7 +55,7 @@ async function getSortedChartItems(date) {
         let videoCounts = new Map();
         let name = song.name;
         let query = `${song.name} ${song.artistNames.join(" ")}`;
-        let currentVideos = await getYoutubeVideos(date, query).items;
+        let currentVideos = await getYoutubeVideos(date, query);
         let pastVideos;
         try {
             pastVideos = await getYoutubeVideos(pastDate, query);
@@ -55,13 +68,15 @@ async function getSortedChartItems(date) {
 
         let commonIds = currentVideos.slice(0, 5).map(item => item.id)
             .filter(id => pastVideos.slice(0, 5).some(item => item.id == id));
+        console.log(commonIds);
 
         let score = 0, exceptionCount = 0;
         for (let id of commonIds) {
-            let currentViewCount = currentVideos.find(item => item.id == id).viewCount;
+            let currentVideo = currentVideos.find(item => item.id == id);
+            let currentViewCount = currentVideo.viewCount;
             let pastViewCount = pastVideos.find(item => item.id == id).viewCount;
-            let koreanCommentRate = await getKoreanCommentRate(date, id);
-            if (koreanCommentRate == null) {
+            let koreanCommentRate = await getKoreanCommentRate(date, currentVideo);
+            if (koreanCommentRate == undefined) {
                 exceptionCount += 1;
             } else {
                 score += (currentViewCount - pastViewCount) * koreanCommentRate;
