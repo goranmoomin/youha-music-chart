@@ -6,9 +6,10 @@ let {
 } = require("./path.js");
 let { readJSONFile } = require("./helpers.js");
 let { videoAnalysisDuration } = require("./video.js");
+let { dataRefreshPeriod } = require("./helpers.js");
 
 function blockIndexOf(date) {
-    return Math.floor(date.getTime() / (30 * 60 * 1000));
+    return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
 async function getMelonChartItems(date) {
@@ -28,7 +29,7 @@ async function getKoreanCommentRate(date, video) {
     let totalCommentCount = 0, totalKoreanCommentCount = 0;
     let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
     await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
-        let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * 30 * 60 * 1000);
+        let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
         let path = youtubeCommentsCacheDataPath(curDate, videoId);
         try {
             let { total, korean } = await readJSONFile(path);
@@ -46,7 +47,7 @@ async function getKoreanCommentRate(date, video) {
 }
 
 async function getSortedChartItems(date) {
-    let pastDate = new Date(date.getTime() - 30 * 60 * 1000);
+    let pastDate = new Date(date.getTime() - dataRefreshPeriod * 60 * 1000);
     let melonChart = await getMelonChartItems(date);
     let musicScores = new Map();
 

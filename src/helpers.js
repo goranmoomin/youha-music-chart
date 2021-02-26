@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 let fs = require("fs").promises;
 
 async function readJSONFile(path) {
@@ -20,7 +22,10 @@ function hasKoreanLetter(comment) {
     return false;
 }
 
+let dataRefreshPeriod = (process.env.DATA_REFRESH_PERIOD || 30);
+
 module.exports = {
     readJSONFile,
-    hasKoreanLetter
+    hasKoreanLetter,
+    dataRefreshPeriod
 };

@@ -20,6 +20,7 @@ let {
 } = require("../src/path.js");
 let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 let { videoAnalysisDuration } = require("../src/video.js");
+let { dataRefreshPeriod } = require("./helpers.js");
 let getJSON = bent("json");
 
 function formatMelonChart(melonChartResponse) {
@@ -76,7 +77,7 @@ function optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData) {
 }
 
 function blockIndexOf(date) {
-    return Math.floor(date.getTime() / (30 * 60 * 1000));
+    return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
 (async () => {
@@ -110,7 +111,7 @@ function blockIndexOf(date) {
             console.log(`Downloading YouTube comments for video ${videoId}.`);
             let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
             let curDate = oldestUntrackedDate;
-            for (let curDate = oldestUntrackedDate; curDate.getTime() <= date.getTime(); curDate = new Date(curDate.getTime() + 30 * 60 * 1000)) {
+            for (let curDate = oldestUntrackedDate; curDate.getTime() <= date.getTime(); curDate = new Date(curDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
                 try {
                     await fs.readFile(youtubeCommentsDataPath(curDate, videoId));
                 } catch (error) {
@@ -163,14 +164,14 @@ function blockIndexOf(date) {
             for (let curBlockIndex = blockIndexOf(date) - 1; curBlockIndex >= blockIndexOf(oldestUntrackedDate); --curBlockIndex) {
                 while (curCommentIndex < comments.length
                        && blockIndexOf(new Date(comments[curCommentIndex].date)) == curBlockIndex) { ++curCommentIndex; }
-                await fs.outputJSON(youtubeCommentsDataPath(new Date(curBlockIndex * 30 * 60 * 1000), videoId),
+                await fs.outputJSON(youtubeCommentsDataPath(new Date(curBlockIndex * dataRefreshPeriod * 60 * 1000), videoId),
                                     { items: comments.slice(curBlockStartIndex, curCommentIndex) });
                 curBlockStartIndex = curCommentIndex + 1;
                 curCommentIndex = curBlockStartIndex;
             }
 
             await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
-                let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * 30 * 60 * 1000); 
+                let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000); 
                 try {
                     let { items: curComments } = await readJSONFile(youtubeCommentsDataPath(curDate, videoId));
                     let curBlockCommentCount = curComments.length;

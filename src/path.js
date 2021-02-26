@@ -1,4 +1,5 @@
 let { utcToZonedTime, format } = require("date-fns-tz");
+let { dataRefreshPeriod } = require("./helpers.js");
 
 function formatDate(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
@@ -14,7 +15,7 @@ function melonChartPath(date) {
 
 function youtubePath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
-    date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
+    date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod);
     let path = `charts/youtube-${format(date, "yyyy.MM.dd.HH:mm")}`;
     return path;
 }
@@ -37,7 +38,7 @@ function youtubeCommentsCacheDataPath(date, videoId) {
 
 function chartCachePath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
-    date.setMinutes(Math.floor(date.getMinutes() / 30) * 30);
+    date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod);
     let path = `charts/chart-cache-${format(date, "yyyy.MM.dd.HH:mm")}.json`;
     return path;
 }
