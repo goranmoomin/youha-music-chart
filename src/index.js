@@ -40,7 +40,7 @@ window.addEventListener("load", function () {
   async function updateChartHTML() {
     let [year, month, day] = dateInputEl.value.split("-").map(str => parseInt(str));
     month -= 1;
-    let date = new Date(year, month, day, ...timeInputEl.dataset.value.split(":").map(str => parseInt(str)));
+    let date = new Date(year, month, day, ...(timeInputEl.dataset.value || timeInputEl.value).split(":").map(str => parseInt(str)));
     if (isNaN(date)) { return; }
     let [chartItems, melonChartItems] = await Promise.all([
       fetch(\`/chart/$\{date.toISOString()}\`).then(res => res.json()),
