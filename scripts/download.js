@@ -108,7 +108,6 @@ function blockIndexOf(date) {
         await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
             let videoId = video.id;
             console.log(`Downloading YouTube comments for video ${videoId}.`);
-            console.log(videoAnalysisDuration(date, video));
             let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
             let curDate = oldestUntrackedDate;
             for (let curDate = oldestUntrackedDate; curDate.getTime() <= date.getTime(); curDate = new Date(curDate.getTime() + 30 * 60 * 1000)) {
@@ -137,16 +136,11 @@ function blockIndexOf(date) {
                         pageToken,
                         maxResults: 100
                     });
-                    // optimizeYoutubeCommentThreadData(rawYoutubeCommentThreadData);
-                    // await fs.outputJSON(youtubeCommentsDataPath(date, videoId, index), rawYoutubeCommentThreadData);
                     let commentThreads = rawYoutubeCommentThreadData.data.items;
                     let curPageComments = commentThreads.map(formatYoutubeComment);
-                    // console.log(curPageComments);
+
                     for (let comment of curPageComments) {
                         let commentWrittenDate = new Date(comment.date);
-                        // console.log('current: ', blockIndexOf(date));
-                        // console.log('publishedAt: ', blockIndexOf(commentWrittenDate));
-                        // console.log('oldestuntrackeddate: ', blockIndexOf(oldestUntrackedDate));
                         if (blockIndexOf(date) > blockIndexOf(commentWrittenDate)
                             && blockIndexOf(commentWrittenDate) >= blockIndexOf(oldestUntrackedDate)) {
                             comments.push(comment);
@@ -164,8 +158,6 @@ function blockIndexOf(date) {
                     throw e;
                 }
             } while (pageToken && blockIndexOf(lastDate) >= blockIndexOf(oldestUntrackedDate))
-
-            // console.log(comments);
 
             let curBlockStartIndex = 0, curCommentIndex = 0;
             for (let curBlockIndex = blockIndexOf(date) - 1; curBlockIndex >= blockIndexOf(oldestUntrackedDate); --curBlockIndex) {

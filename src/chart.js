@@ -30,7 +30,6 @@ async function getKoreanCommentRate(date, video) {
     await Promise.all([...Array(blockIndexOf(date) - blockIndexOf(oldestUntrackedDate)).keys()].map(async index => {
         let curDate = new Date((blockIndexOf(oldestUntrackedDate) + index) * 30 * 60 * 1000);
         let path = youtubeCommentsCacheDataPath(curDate, videoId);
-        console.log(path);
         try {
             let { total, korean } = await readJSONFile(path);
             totalCommentCount += total;
@@ -68,7 +67,6 @@ async function getSortedChartItems(date) {
 
         let commonIds = currentVideos.slice(0, 5).map(item => item.id)
             .filter(id => pastVideos.slice(0, 5).some(item => item.id == id));
-        console.log(commonIds);
 
         let score = 0, exceptionCount = 0;
         for (let id of commonIds) {
