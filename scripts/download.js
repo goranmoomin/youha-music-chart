@@ -21,6 +21,7 @@ let {
 let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 let { videoAnalysisDuration } = require("../src/video.js");
 let { dataRefreshPeriod } = require("../src/helpers.js");
+let { getSortedChart } = require("../src/chart.js");
 let getJSON = bent("json");
 
 function formatMelonChart(melonChartResponse) {
@@ -64,7 +65,6 @@ function blockIndex(date) {
 }
 
 (async () => {
-    let chartCache = {};
     let melonChartResponse = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
     let melonChart = formatMelonChart(melonChartResponse);
     let date = new Date();
@@ -172,5 +172,7 @@ function blockIndex(date) {
             }));
         }));
     }));
+    let chart = await getSortedChart(date);
+    await fs.outputJSON(chartCachePath(date), chart);
     console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
 })();

@@ -1,7 +1,7 @@
 let Koa = require("koa");
 let Router = require("@koa/router");
 
-let { getMelonChartItems, getSortedChartItems } = require("./chart.js");
+let { getMelonChartItems, getCachedSortedChartItems } = require("./chart.js");
 
 let app = new Koa();
 let router = new Router();
@@ -67,7 +67,7 @@ router.get("/", async (ctx, next) => {
       </thead>
       <tbody>`;
     let date = new Date();
-    let chartItems = await getSortedChartItems(date);
+    let chartItems = await getCachedSortedChartItems(date);
     let melonChartItems = await getMelonChartItems(date);
     for (let i = 0; i < chartItems.length; i++) {
         let music = chartItems[i];
@@ -80,13 +80,13 @@ router.get("/", async (ctx, next) => {
 
 router.get("/chart", async (ctx, next) => {
     let date = new Date();
-    let chart = await getSortedChartItems(date);
+    let chart = await getCachedSortedChartItems(date);
     ctx.body = chart;
 });
 
 router.get("/chart/:date", async (ctx, next) => {
     let date = new Date(ctx.params.date);
-    let chart = await getSortedChartItems(date);
+    let chart = await getCachedSortedChartItems(date);
     ctx.body = chart;
 });
 

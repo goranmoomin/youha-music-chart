@@ -1,6 +1,7 @@
 let fs = require("fs").promises;
 let {
     melonChartPath,
+    chartCachePath,
     youtubeSearchResultPath,
     youtubeCommentsCacheDataPath
 } = require("./path.js");
@@ -12,10 +13,14 @@ function blockIndex(date) {
     return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
-async function getMelonChartItems(date) {
+async function getMelonChart(date) {
     let path = melonChartPath(date);
-    let { items } = await readJSONFile(path);
-    return items;
+    let chart = await readJSONFile(path);
+    return chart;
+}
+
+async function getMelonChartItems(date) {
+    return (await getMelonChart(date)).items;
 }
 
 async function getYoutubeVideos(date, query) {
@@ -94,7 +99,30 @@ async function getSortedChartItems(date) {
     return chart;
 }
 
+async function getSortedChart(date) {
+    return { items: getSortedChartItems(date) };
+}
+
+async function getCachedSortedChart(date) {
+    try {
+        return await readJSONFile(chartCachePath(date));
+    } catch (e) {
+        if (e.code == "ENOENT") {
+            return await getSortedChart(date);
+        }
+        throw e;
+    }
+}
+
+async function getCachedSortedChartItems(date) {
+    return (await getCachedSortedChart(date)).items;
+}
+
 module.exports = {
+    getMelonChart,
     getMelonChartItems,
-    getSortedChartItems
+    getSortedChart,
+    getSortedChartItems,
+    getCachedSortedChart,
+    getCachedSortedChartItems
 };
