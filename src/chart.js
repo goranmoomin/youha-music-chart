@@ -100,7 +100,7 @@ async function getSortedChartItems(date) {
 }
 
 async function getSortedChart(date) {
-    return { items: getSortedChartItems(date) };
+    return { items: await getSortedChartItems(date) };
 }
 
 async function getCachedSortedChart(date) {
