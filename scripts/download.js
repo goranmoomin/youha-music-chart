@@ -172,7 +172,8 @@ function blockIndex(date) {
             }));
         }));
     }));
+    console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
     let chart = await getSortedChart(date);
     await fs.outputJSON(chartCachePath(date), chart);
-    console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
+    console.log(`Cached chart to ${chartCachePath(date)}`);
 })();
