@@ -18,6 +18,8 @@ router.get("/", async (ctx, next) => {
   <section>
     <input type="date">
     <input type="time" title="chart time">
+  </section>
+  <section>
     <table>
       <thead>
         <tr><th>순위</th><th>앨범 표지</th><th>곡 이름</th><th>점수</th><th>앨범 표지</th><th>곡 이름</th></tr>
@@ -42,6 +44,8 @@ window.addEventListener("load", function () {
     month -= 1;
     let date = new Date(year, month, day, ...(timeInputEl.dataset.value || timeInputEl.value).split(":").map(str => parseInt(str)));
     if (isNaN(date)) { return; }
+    let tbodyEl = document.querySelector("tbody");
+    tbodyEl.innerHTML = \`<tr><td colspan="6" style="text-align: center;">Loading...</td></tr>\`
     let [chartItems, melonChartItems] = await Promise.all([
       fetch(\`/chart/$\{date.toISOString()}\`).then(res => res.json()),
       fetch(\`/melonchart/$\{date.toISOString()}\`).then(res => res.json())
@@ -52,7 +56,6 @@ window.addEventListener("load", function () {
       let melonMusic = melonChartItems[i];
       tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumImgUrl}"></td><td>$\{music.name}</td><td>$\{music.score.toFixed(2)}</td><td><img src="$\{melonMusic.albumImgUrl}"></td><td>$\{melonMusic.name}</td></tr>\`;
     }
-    let tbodyEl = document.querySelector("tbody");
     tbodyEl.innerHTML = tableBodyHTML;
   }
   dateInputEl.addEventListener("change", updateChartHTML);
