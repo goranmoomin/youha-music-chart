@@ -13,6 +13,47 @@ router.get("/", async (ctx, next) => {
   <link rel="stylesheet" href="https://unpkg.com/mvp.css">
   <script src="https://unpkg.com/date-input-polyfill" async></script>
   <script src="https://cdn.jsdelivr.net/npm/time-input-polyfill"></script>
+  <script>
+  window.addEventListener("load", function () {
+    let abortController = new AbortController();
+    let dateInputEl = document.querySelector("input[type=date]");
+    let timeInputEl = document.querySelector("input[type=time]");
+    async function updateChartHTML() {
+      let [year, month, day] = dateInputEl.value.split("-").map(str => parseInt(str));
+      month -= 1;
+      let date = new Date(year, month, day, ...(timeInputEl.dataset.value || timeInputEl.value).split(":").map(str => parseInt(str)));
+      if (isNaN(date)) { return; }
+      abortController.abort();
+      abortController = new AbortController();
+      let signal = abortController.signal;
+      let tbodyEl = document.querySelector("tbody");
+      tbodyEl.innerHTML = \`<tr><td colspan="6" style="text-align: center;">Loading...</td></tr>\`
+      let chartItems;
+      let melonChartItems;
+      try {
+        [chartItems, melonChartItems] = await Promise.all([
+          fetch(\`/chart/$\{date.toISOString()}\`, { signal }).then(res => res.json()),
+          fetch(\`/melonchart/$\{date.toISOString()}\`, { signal }).then(res => res.json())
+        ]);
+      } catch (e) {
+        if (e.name == "AbortError") { return; }
+        else if (e.name == "SyntaxError") {
+          tbodyEl.innerHTML = \`<tr><td colspan="6" style="text-align: center;">Chart doesn't exist.</td></tr>\`;
+          return;
+        } else { throw e; }
+      }
+      let tableBodyHTML = "";
+      for (let i = 0; i < chartItems.length; i++) {
+        let music = chartItems[i];
+        let melonMusic = melonChartItems[i];
+        tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumImgUrl}"></td><td>$\{music.name}</td><td>$\{music.score.toFixed(2)}</td><td><img src="$\{melonMusic.albumImgUrl}"></td><td>$\{melonMusic.name}</td></tr>\`;
+      }
+      tbodyEl.innerHTML = tableBodyHTML;
+    }
+    dateInputEl.addEventListener("change", updateChartHTML);
+    timeInputEl.addEventListener("change", updateChartHTML);
+  });
+  </script>
 </head>
 <body>
   <section>
@@ -33,37 +74,7 @@ router.get("/", async (ctx, next) => {
         let melonMusic = melonChartItems[i];
         html += `<tr><td>${i + 1}</td><td><img src="${music.albumImgUrl}"></td><td>${music.name}</td><td>${music.score.toFixed(2)}</td><td><img src="${melonMusic.albumImgUrl}"></td><td>${melonMusic.name}</td></tr>`;
     }
-    html += `</tbody></table></section>`;
-    html += `
-<script>
-window.addEventListener("load", function () {
-  let dateInputEl = document.querySelector("input[type=date]");
-  let timeInputEl = document.querySelector("input[type=time]");
-  async function updateChartHTML() {
-    let [year, month, day] = dateInputEl.value.split("-").map(str => parseInt(str));
-    month -= 1;
-    let date = new Date(year, month, day, ...(timeInputEl.dataset.value || timeInputEl.value).split(":").map(str => parseInt(str)));
-    if (isNaN(date)) { return; }
-    let tbodyEl = document.querySelector("tbody");
-    tbodyEl.innerHTML = \`<tr><td colspan="6" style="text-align: center;">Loading...</td></tr>\`
-    let [chartItems, melonChartItems] = await Promise.all([
-      fetch(\`/chart/$\{date.toISOString()}\`).then(res => res.json()),
-      fetch(\`/melonchart/$\{date.toISOString()}\`).then(res => res.json())
-    ]);
-    let tableBodyHTML = "";
-    for (let i = 0; i < chartItems.length; i++) {
-      let music = chartItems[i];
-      let melonMusic = melonChartItems[i];
-      tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumImgUrl}"></td><td>$\{music.name}</td><td>$\{music.score.toFixed(2)}</td><td><img src="$\{melonMusic.albumImgUrl}"></td><td>$\{melonMusic.name}</td></tr>\`;
-    }
-    tbodyEl.innerHTML = tableBodyHTML;
-  }
-  dateInputEl.addEventListener("change", updateChartHTML);
-  timeInputEl.addEventListener("change", updateChartHTML);
-});
-</script>
-`;
-    html += `</body></html>`;
+    html += `</tbody></table></section></body></html>`;
     ctx.body = html;
 });
 
