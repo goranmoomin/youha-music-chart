@@ -108,7 +108,9 @@ async function getCachedSortedChart(date) {
         return await readJSONFile(chartCachePath(date));
     } catch (e) {
         if (e.code == "ENOENT") {
-            return await getSortedChart(date);
+            let chart = await getSortedChart(date);
+            await fs.outputJSON(chartCachePath(date), chart);
+            return chart;
         }
         throw e;
     }
