@@ -20,7 +20,7 @@ let {
 } = require("../src/path.js");
 let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 let { videoAnalysisDuration } = require("../src/video.js");
-let { dataRefreshPeriod } = require("./helpers.js");
+let { dataRefreshPeriod } = require("../src/helpers.js");
 let getJSON = bent("json");
 
 function formatMelonChart(melonChartResponse) {
