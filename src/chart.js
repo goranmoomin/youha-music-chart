@@ -64,8 +64,24 @@ async function getKoreanCommentRate(date, video) {
 
 async function getSortedChartItems(date) {
     let pastDate = new Date(date.getTime() - dataRefreshPeriod * 60 * 1000);
-    let melonChartItems = await getMelonChartItems(date);
-    let genieChartItems = await getGenieChartItems(date);
+    let melonChartItems;
+    let genieChartItems;
+    try {
+        melonChartItems = await getMelonChartItems(date);
+    } catch (e) {
+        if (e.code != "ENOENT") {
+            throw e;
+        }
+        melonChartItems = [];
+    }
+    try {
+        genieChartItems = await getGenieChartItems(date);
+    } catch (e) {
+        if (e.code != "ENOENT") {
+            throw e;
+        }
+        genieChartItems = [];
+    }
     let chartItems = [];
     for (let chartItem of [...melonChartItems, ...genieChartItems]) {
         if (!chartItems.some(item => item.name == chartItem.name)) {
