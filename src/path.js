@@ -13,6 +13,13 @@ function melonChartPath(date) {
     return path;
 }
 
+function genieChartPath(date) {
+    date = utcToZonedTime(date, "Asia/Seoul");
+    date.setMinutes(0);
+    let path = `charts/genie-chart-${format(date, "yyyy.MM.dd.HH:mm")}.json`;
+    return path;
+}
+
 function youtubePath(date) {
     date = utcToZonedTime(date, "Asia/Seoul");
     date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod);
@@ -46,6 +53,7 @@ function chartCachePath(date) {
 module.exports = {
     formatDate,
     melonChartPath,
+    genieChartPath,
     youtubePath,
     youtubeSearchResultPath,
     youtubeCommentsDataPath,

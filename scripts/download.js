@@ -12,6 +12,7 @@ let {
 let {
     formatDate,
     melonChartPath,
+    genieChartPath,
     youtubePath,
     youtubeSearchResultPath,
     youtubeCommentsDataPath,
@@ -33,6 +34,18 @@ function formatMelonChart(melonChartResponse) {
         name: song.SONGNAME,
         artistNames: song.ARTISTLIST.map(artist => artist.ARTISTNAME),
         albumImgUrl: song.ALBUMIMG
+    }));
+    return { date, items };
+}
+
+function formatGenieChart(date, genieChartResponse) {
+    date = new Date(date.getTime());
+    date.setMinutes(0);
+    let items = genieChartResponse.DataSet.DATA.map(song => ({
+        id: song.SONG_ID,
+        name: decodeURIComponent(song.SONG_NAME),
+        artistNames: [decodeURIComponent(song.ARTIST_NAME)],
+        albumImgUrl: decodeURIComponent(song.ALBUM_IMG_PATH)
     }));
     return { date, items };
 }
@@ -65,12 +78,23 @@ function blockIndex(date) {
 }
 
 (async () => {
+    let date = new Date();
     let melonChartResponse = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
     let melonChart = formatMelonChart(melonChartResponse);
-    let date = new Date();
     await fs.outputJSON(melonChartPath(date), melonChart);
     console.log(`Downloaded Melon chart to ${melonChartPath(date)}.`);
-    await Promise.all(melonChart.items.map(async song => {
+    let genieChartResponse = await getJSON("https://app.genie.co.kr/chart/j_RealTimeRankSongList.json");
+    let genieChart = formatGenieChart(date, genieChartResponse);
+    await fs.outputJSON(genieChartPath(date), genieChart);
+    console.log(`Downloaded Genie chart to ${genieChartPath(date)}.`);
+    let chartItems = [];
+    for (let chartItem of [...melonChart.items, ...genieChart.items]) {
+        if (!chartItems.some(item => item.name == chartItem.name)) {
+            chartItems.push(chartItem);
+        }
+    }
+    await Promise.all(chartItems.map(async song => {
+        console.log(`Downloading song statistics for song ${song.name}.`);
         let name = song.name;
         let query = `${song.name} ${song.artistNames.join(" ")}`;
         let youtubeSearchResponse = await youtube.search.list({
@@ -167,10 +191,13 @@ function blockIndex(date) {
                     let currentBlockCommentInfo = { total: currentBlockCommentCount, korean: currentBlockKoreanCommentCount };
                     await fs.outputJSON(youtubeCommentsCacheDataPath(currentDate, videoId), currentBlockCommentInfo);
                 } catch (error) {
-                    throw error;
+                    // TODO: Find out why this error happens.
+                    console.log(currentDate, videoId);
+                    console.error(error);
                 }
             }));
         }));
+        console.log(`Downloaded song statistics for song ${song.name}.`);
     }));
     console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
     let chart = await getSortedChart(date);

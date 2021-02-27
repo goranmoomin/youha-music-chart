@@ -1,6 +1,7 @@
 let fs = require("fs-extra");
 let {
     melonChartPath,
+    genieChartPath,
     chartCachePath,
     youtubeSearchResultPath,
     youtubeCommentsCacheDataPath
@@ -21,6 +22,16 @@ async function getMelonChart(date) {
 
 async function getMelonChartItems(date) {
     return (await getMelonChart(date)).items;
+}
+
+async function getGenieChart(date) {
+    let path = genieChartPath(date);
+    let chart = await readJSONFile(path);
+    return chart;
+}
+
+async function getGenieChartItems(date) {
+    return (await getGenieChart(date)).items;
 }
 
 async function getYoutubeVideos(date, query) {
@@ -53,10 +64,17 @@ async function getKoreanCommentRate(date, video) {
 
 async function getSortedChartItems(date) {
     let pastDate = new Date(date.getTime() - dataRefreshPeriod * 60 * 1000);
-    let melonChart = await getMelonChartItems(date);
-    let musicScores = new Map();
+    let melonChartItems = await getMelonChartItems(date);
+    let genieChartItems = await getGenieChartItems(date);
+    let chartItems = [];
+    for (let chartItem of [...melonChartItems, ...genieChartItems]) {
+        if (!chartItems.some(item => item.name == chartItem.name)) {
+            chartItems.push(chartItem);
+        }
+    }
 
-    for (let song of melonChart) {
+    let musicScores = new Map();
+    for (let song of chartItems) {
         let videoCounts = new Map();
         let name = song.name;
         let query = `${song.name} ${song.artistNames.join(" ")}`;
@@ -94,7 +112,7 @@ async function getSortedChartItems(date) {
 
     let chart = [...musicScores].sort((a, b) => -(a[1] - b[1])).map(([name, score]) => ({
         score,
-        ...melonChart.find(song => song.name == name)
+        ...chartItems.find(song => song.name == name)
     }));
     return chart;
 }
