@@ -1,6 +1,6 @@
 require("dotenv").config();
 
-let fs = require("fs-extra");
+let process = require("process");
 let bent = require("bent");
 let { google } = require("googleapis");
 let youtube = google.youtube("v3");
@@ -8,27 +8,27 @@ let {
     zonedTimeToUtc,
     differenceInMinutes
 } = require("date-fns-tz");
+let { toDate, startOfHour } = require("date-fns");
+let { MongoClient } = require("mongodb");
 
-let {
-    formatDate,
-    melonChartPath,
-    genieChartPath,
-    youtubePath,
-    youtubeSearchResultPath,
-    youtubeCommentsDataPath,
-    youtubeCommentsCacheDataPath,
-    chartCachePath
-} = require("../src/path.js");
+let { formatDate } = require("../src/path.js");
 let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
 let { videoAnalysisDuration } = require("../src/video.js");
 let { dataRefreshPeriod } = require("../src/helpers.js");
 let { getSortedChart } = require("../src/chart.js");
 let getJSON = bent("json");
 
-function formatMelonChart(melonChartResponse) {
-    let day = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
-    let hour = melonChartResponse.response.RANKHOUR.split(":").map(s => Number.parseInt(s));
-    let date = zonedTimeToUtc(Date(...day, ...hour), "Asia/Seoul");
+let uri = process.env.MONGODB_URI;
+let client = new MongoClient(uri, { useNewUrlParser: true, useUnifiedTopology: true });
+
+function startOfDataRefresh(date) {
+    date = toDate(date);
+    date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod, 0, 0);
+    return date;
+}
+
+function formatMelonChart(date, melonChartResponse) {
+    date = startOfHour(date);
     let items = melonChartResponse.response.HITSSONGLIST.map(song => ({
         id: song.SONGID,
         name: song.SONGNAME,
@@ -39,8 +39,7 @@ function formatMelonChart(melonChartResponse) {
 }
 
 function formatGenieChart(date, genieChartResponse) {
-    date = new Date(date.getTime());
-    date.setMinutes(0);
+    date = startOfHour(date);
     let items = genieChartResponse.DataSet.DATA.map(song => ({
         id: song.SONG_ID,
         name: decodeURIComponent(song.SONG_NAME),
@@ -78,15 +77,34 @@ function blockIndex(date) {
 }
 
 (async () => {
-    let date = new Date();
+    await client.connect();
+    console.log("DB connection established.");
+    let db = client.db("mainDB");
+    let melonChartCollection = db.collection("melonCharts");
+    let genieChartCollection = db.collection("genieCharts");
+    let youtubeSearchResultCollection = db.collection("youtubeSearchResults");
+    let youtubeCommentCollection = db.collection("youtubeComments");
+    let date = startOfDataRefresh(new Date());
     let melonChartResponse = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
-    let melonChart = formatMelonChart(melonChartResponse);
-    await fs.outputJSON(melonChartPath(date), melonChart);
-    console.log(`Downloaded Melon chart to ${melonChartPath(date)}.`);
+    let melonChart = formatMelonChart(date, melonChartResponse);
+    await melonChartCollection.findOneAndUpdate({
+        date: melonChart.date
+    }, {
+        $set: melonChart
+    }, {
+        upsert: true
+    });
+    console.log(`Updated Melon chart at ${formatDate(melonChart.date)} to collection melonCharts.`);
     let genieChartResponse = await getJSON("https://app.genie.co.kr/chart/j_RealTimeRankSongList.json");
     let genieChart = formatGenieChart(date, genieChartResponse);
-    await fs.outputJSON(genieChartPath(date), genieChart);
-    console.log(`Downloaded Genie chart to ${genieChartPath(date)}.`);
+    await genieChartCollection.findOneAndUpdate({
+        date: genieChart.date
+    }, {
+        $set: genieChart
+    }, {
+        upsert: true
+    });
+    console.log(`Updated Genie chart at ${formatDate(genieChart.date)} to collection genieCharts.`);
     let chartItems = [];
     for (let chartItem of [...melonChart.items, ...genieChart.items]) {
         if (!chartItems.some(item => item.name == chartItem.name)) {
@@ -109,8 +127,19 @@ function blockIndex(date) {
             id: youtubeSearchResponse.data.items.map(video => video.id.videoId)
         });
 
-        let youtubeSearchResult = { items: youtubeVideosResponse.data.items.map(formatYoutubeVideo) };
-        await fs.outputJSON(youtubeSearchResultPath(date, query), youtubeSearchResult);
+        let youtubeSearchResult = {
+            date,
+            query,
+            items: youtubeVideosResponse.data.items.map(formatYoutubeVideo)
+        };
+        await youtubeSearchResultCollection.findOneAndUpdate({
+            date,
+            query
+        }, {
+            $set: youtubeSearchResult
+        }, {
+            upsert: true
+        });
         let youtubeVideos = youtubeSearchResult.items;
 
         await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
@@ -119,15 +148,11 @@ function blockIndex(date) {
             let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
             let currentDate = oldestUntrackedDate;
             for (let currentDate = oldestUntrackedDate; currentDate.getTime() <= date.getTime(); currentDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
-                try {
-                    await fs.readFile(youtubeCommentsDataPath(currentDate, videoId));
-                } catch (error) {
-                    if (error.code == "ENOENT") {
-                        break;
-                    } else {
-                        throw error;
-                    }
-                }
+                let doesCommentForCurrentDayExists = await youtubeCommentCollection.find({
+                    date: currentDate,
+                    videoId
+                }).limit(1).count() == 1;
+                if (!doesCommentForCurrentDayExists) { break; }
             }
 
             let pageToken;
@@ -171,36 +196,23 @@ function blockIndex(date) {
             for (let currentBlockIndex = blockIndex(date) - 1; currentBlockIndex >= blockIndex(oldestUntrackedDate); --currentBlockIndex) {
                 while (currentCommentIndex < comments.length
                        && blockIndex(new Date(comments[currentCommentIndex].date)) == currentBlockIndex) { ++currentCommentIndex; }
-                await fs.outputJSON(youtubeCommentsDataPath(new Date(currentBlockIndex * dataRefreshPeriod * 60 * 1000), videoId),
-                                    { items: comments.slice(currentBlockStartIndex, currentCommentIndex) });
+                await youtubeCommentCollection.findOneAndUpdate({
+                    date: new Date(currentBlockIndex * dataRefreshPeriod * 60 * 1000),
+                    videoId
+                }, {
+                    $setOnInsert: {
+                        items: comments.slice(currentBlockStartIndex, currentCommentIndex)
+                    }
+                }, {
+                    upsert: true
+                });
+                console.log(`Updated video ${videoId} comments at index ${currentBlockIndex}.`);
                 currentBlockStartIndex = currentCommentIndex + 1;
                 currentCommentIndex = currentBlockStartIndex;
             }
-
-            await Promise.all([...Array(blockIndex(date) - blockIndex(oldestUntrackedDate)).keys()].map(async index => {
-                let currentDate = new Date((blockIndex(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
-                try {
-                    let { items: currentComments } = await readJSONFile(youtubeCommentsDataPath(currentDate, videoId));
-                    let currentBlockCommentCount = currentComments.length;
-                    let currentBlockKoreanCommentCount = 0;
-                    for (let comment of currentComments) {
-                        if (hasKoreanLetter(comment.text)) {
-                            ++currentBlockKoreanCommentCount;
-                        }
-                    }
-                    let currentBlockCommentInfo = { total: currentBlockCommentCount, korean: currentBlockKoreanCommentCount };
-                    await fs.outputJSON(youtubeCommentsCacheDataPath(currentDate, videoId), currentBlockCommentInfo);
-                } catch (error) {
-                    // TODO: Find out why this error happens.
-                    console.log(currentDate, videoId);
-                    console.error(error);
-                }
-            }));
         }));
-        console.log(`Downloaded song statistics for song ${song.name}.`);
+        console.log(`Inserted song statistics for song ${song.name}.`);
     }));
-    console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
-    let chart = await getSortedChart(date);
-    await fs.outputJSON(chartCachePath(date), chart);
-    console.log(`Cached chart to ${chartCachePath(date)}`);
+    console.log(`Inserted YouTube data to DB.`);
+    await client.close();
 })();
