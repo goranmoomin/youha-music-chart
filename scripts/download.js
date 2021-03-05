@@ -59,13 +59,14 @@ function formatYoutubeVideo({ id, snippet, statistics }) {
 
 function formatYoutubeCommentThread({ id, snippet }) {
     try {
+        let videoId = snippet.videoId;
         let commentSnippet = snippet.topLevelComment.snippet;
         let text = commentSnippet.textOriginal;
         let date = commentSnippet.publishedAt;
         let likeCount = commentSnippet.likeCount;
         let authorId = commentSnippet.authorChannelId && commentSnippet.authorChannelId.value;
         return {
-            id, text, date, likeCount, authorId
+            id, videoId, text, date, likeCount, authorId
         };
     } catch (e) {
         throw e;
@@ -111,6 +112,9 @@ function blockIndex(date) {
             chartItems.push(chartItem);
         }
     }
+
+    let bulk = youtubeCommentCollection.initializeUnorderedBulkOp();
+    let youtubeVideos = [];
     await Promise.all(chartItems.map(async song => {
         console.log(`Downloading song statistics for song ${song.name}.`);
         let name = song.name;
@@ -140,79 +144,89 @@ function blockIndex(date) {
         }, {
             upsert: true
         });
-        let youtubeVideos = youtubeSearchResult.items;
+        console.log(`Inserted song youtube search results for song ${song.name}.`);
 
-        await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
-            let videoId = video.id;
-            console.log(`Downloading YouTube comments for video ${videoId}.`);
-            let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
-            let currentDate = oldestUntrackedDate;
-            for (let currentDate = oldestUntrackedDate; currentDate.getTime() <= date.getTime(); currentDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
-                let doesCommentForCurrentDayExists = await youtubeCommentCollection.find({
-                    date: currentDate,
-                    videoId
-                }).limit(1).count() == 1;
-                if (!doesCommentForCurrentDayExists) { break; }
+        for (let i=0; i<5; ++i) {
+            if (!youtubeVideos.find(video => video.id == youtubeSearchResult.items[i].id)) {
+                youtubeVideos.push(youtubeSearchResult.items[i]);
             }
-
-            let pageToken;
-            let lastDate = date;
-            let comments = [];
-            do {
-                console.log(`Downloading YouTube comment thread from ${formatDate(lastDate)} for video ${videoId}.`);
-                try {
-                    let youtubeCommentThreadsResponse = await youtube.commentThreads.list({
-                        auth: process.env.YOUTUBE_API_KEY,
-                        part: ["id", "replies", "snippet"],
-                        videoId,
-                        order: "time",
-                        pageToken,
-                        maxResults: 100
-                    });
-                    let youtubeCommentThreads = youtubeCommentThreadsResponse.data.items;
-                    let currentPageComments = youtubeCommentThreads.map(formatYoutubeCommentThread);
-
-                    for (let comment of currentPageComments) {
-                        let commentWrittenDate = new Date(comment.date);
-                        if (blockIndex(date) > blockIndex(commentWrittenDate)
-                            && blockIndex(commentWrittenDate) >= blockIndex(oldestUntrackedDate)) {
-                            comments.push(comment);
-                        }
-                    }
-                    if (!youtubeCommentThreads.length) { break; }
-                    let lastYoutubeCommentThread = youtubeCommentThreads[youtubeCommentThreads.length - 1];
-                    lastDate = new Date(lastYoutubeCommentThread.snippet.topLevelComment.snippet.publishedAt);
-                    pageToken = youtubeCommentThreadsResponse.data.nextPageToken;
-                } catch(e) {
-                    if (e.message === `The video identified by the <code><a href="/youtube/v3/docs/commentThreads/list#videoId">videoId</a></code> parameter has disabled comments.`) {
-                        console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
-                        break;
-                    }
-                    throw e;
-                }
-            } while (pageToken && blockIndex(lastDate) >= blockIndex(oldestUntrackedDate))
-
-            let currentBlockStartIndex = 0, currentCommentIndex = 0;
-            for (let currentBlockIndex = blockIndex(date) - 1; currentBlockIndex >= blockIndex(oldestUntrackedDate); --currentBlockIndex) {
-                while (currentCommentIndex < comments.length
-                       && blockIndex(new Date(comments[currentCommentIndex].date)) == currentBlockIndex) { ++currentCommentIndex; }
-                await youtubeCommentCollection.findOneAndUpdate({
-                    date: new Date(currentBlockIndex * dataRefreshPeriod * 60 * 1000),
-                    videoId
-                }, {
-                    $setOnInsert: {
-                        items: comments.slice(currentBlockStartIndex, currentCommentIndex)
-                    }
-                }, {
-                    upsert: true
-                });
-                console.log(`Updated video ${videoId} comments at index ${currentBlockIndex}.`);
-                currentBlockStartIndex = currentCommentIndex + 1;
-                currentCommentIndex = currentBlockStartIndex;
-            }
-        }));
-        console.log(`Inserted song statistics for song ${song.name}.`);
+        }
     }));
-    console.log(`Inserted YouTube data to DB.`);
+
+    await Promise.all(youtubeVideos.map(async youtubeVideo => {
+        let videoId = youtubeVideo.id;
+        console.log(`Downloading YouTube comments for video ${videoId}.`);
+        let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, youtubeVideo));
+        let currentDate = oldestUntrackedDate;
+        for (let currentDate = oldestUntrackedDate; currentDate.getTime() <= date.getTime(); currentDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
+            let doesCommentForCurrentDateExist = await youtubeCommentCollection.find({
+                date: startOfDataRefresh(currentDate),
+                videoId
+            }).limit(1).count() == 1;
+            if (!doesCommentForCurrentDateExist) { break; }
+        }
+
+        let pageToken;
+        let comments = [];
+        let lastDate = date;
+        do {
+            console.log(`Downloading YouTube comment thread from ${formatDate(lastDate)} for video ${videoId}.`);
+            try {
+                let youtubeCommentThreadsResponse = await youtube.commentThreads.list({
+                    auth: process.env.YOUTUBE_API_KEY,
+                    part: ["id", "replies", "snippet"],
+                    videoId,
+                    order: "time",
+                    pageToken,
+                    maxResults: 100
+                });
+                let youtubeCommentThreads = youtubeCommentThreadsResponse.data.items;
+                let currentPageComments = youtubeCommentThreads.map(formatYoutubeCommentThread);
+
+                for (let comment of currentPageComments) {
+                    let commentWrittenDate = new Date(comment.date);
+                    if (blockIndex(date) > blockIndex(commentWrittenDate)
+                        && blockIndex(commentWrittenDate) >= blockIndex(oldestUntrackedDate)) {
+                        comments.push(comment);
+                    }
+                }
+                if (!youtubeCommentThreads.length) { break; }
+                let lastYoutubeCommentThread = youtubeCommentThreads[youtubeCommentThreads.length - 1];
+                lastDate = new Date(lastYoutubeCommentThread.snippet.topLevelComment.snippet.publishedAt);
+                pageToken = youtubeCommentThreadsResponse.data.nextPageToken;
+            } catch(e) {
+                if (e.message === `The video identified by the <code><a href="/youtube/v3/docs/commentThreads/list#videoId">videoId</a></code> parameter has disabled comments.`) {
+                    console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
+                    break;
+                }
+                throw e;
+            }
+        } while (pageToken && blockIndex(lastDate) >= blockIndex(oldestUntrackedDate))
+
+        let currentBlockStartIndex = 0, currentCommentIndex = 0;
+        let slicedComments = {};
+        for (let currentBlockIndex = blockIndex(date) - 1; currentBlockIndex >= blockIndex(oldestUntrackedDate); --currentBlockIndex) {
+            while (currentCommentIndex < comments.length
+                   && blockIndex(new Date(comments[currentCommentIndex].date)) == currentBlockIndex) { ++currentCommentIndex; }
+            slicedComments[currentBlockIndex] = comments.slice(currentBlockStartIndex, currentCommentIndex);
+            currentBlockStartIndex = currentCommentIndex + 1;
+            currentCommentIndex = currentBlockStartIndex;
+        }
+        
+        for (let [currentBlockIndex, items] of Object.entries(slicedComments)) {
+            bulk.find({
+                date: new Date(currentBlockIndex * dataRefreshPeriod * 60 * 1000),
+                videoId
+            }).upsert().updateOne({
+                $set: {
+                    items
+                }
+            });
+        };
+    }));
+
+    console.log(`Starting bulk DB insert operation at ${formatDate(new Date())}.`);
+    await bulk.execute();
+    console.log(`Finished bulk DB insert operation at ${formatDate(new Date())}.`);
     await client.close();
 })();
