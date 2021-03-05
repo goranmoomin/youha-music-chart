@@ -66,13 +66,20 @@ router.get("/", async (ctx, next) => {
         <tr><th>순위</th><th>앨범 표지</th><th>곡 이름</th><th>점수</th><th>앨범 표지</th><th>곡 이름</th></tr>
       </thead>
       <tbody>`;
-    let date = new Date();
-    let chartItems = await getCachedSortedChartItems(date);
-    let melonChartItems = await getMelonChartItems(date);
-    for (let i = 0; i < chartItems.length; i++) {
-        let music = chartItems[i];
-        let melonMusic = melonChartItems[i];
-        html += `<tr><td>${i + 1}</td><td><img src="${music.albumImgUrl}" style="height: 72px;"></td><td>${music.name}</td><td>${music.score.toFixed(2)}</td><td><img src="${melonMusic.albumImgUrl}" style="height: 72px;"></td><td>${melonMusic.name}</td></tr>`;
+    try {
+        let date = new Date();
+        let chartItems = await getCachedSortedChartItems(date);
+        let melonChartItems = await getMelonChartItems(date);
+        for (let i = 0; i < chartItems.length; i++) {
+            let music = chartItems[i];
+            let melonMusic = melonChartItems[i];
+            html += `<tr><td>${i + 1}</td><td><img src="${music.albumImgUrl}" style="height: 72px;"></td><td>${music.name}</td><td>${music.score.toFixed(2)}</td><td><img src="${melonMusic.albumImgUrl}" style="height: 72px;"></td><td>${melonMusic.name}</td></tr>`;
+        }
+    } catch (e) {
+        if (e.code != "ENOENT") {
+            throw e;
+        }
+        html += `<tr><td colspan="6" style="text-align: center;">Chart doesn't exist.</td></tr>`;
     }
     html += `</tbody></table></section></body></html>`;
     ctx.body = html;
