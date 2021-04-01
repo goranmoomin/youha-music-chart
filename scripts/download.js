@@ -116,11 +116,10 @@ function blockIndex(date) {
         await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
             let videoId = video.id;
             console.log(`Downloading YouTube comments for video ${videoId}.`);
-            let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
-            let currentDate = oldestUntrackedDate;
-            for (let currentDate = oldestUntrackedDate; currentDate.getTime() <= date.getTime(); currentDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
+            let oldestUntrackedDate;
+            for (oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video)); oldestUntrackedDate.getTime() <= date.getTime(); oldestUntrackedDate = new Date(oldestUntrackedDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
                 try {
-                    await fs.readFile(youtubeCommentsDataPath(currentDate, videoId));
+                    await fs.readFile(youtubeCommentsDataPath(oldestUntrackedDate, videoId));
                 } catch (error) {
                     if (error.code == "ENOENT") {
                         break;
