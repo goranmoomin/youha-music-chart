@@ -18,10 +18,10 @@ let { videoAnalysisDuration } = require("../src/video.js");
 let { dataRefreshPeriod } = require("../src/helpers.js");
 
 function formatMelonChart(melonChartResponse) {
-    let day = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
+    let [year, month, day] = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
+    month--;
     let [hour, minute] = melonChartResponse.response.RANKHOUR.split(":").map(s => Number.parseInt(s));
-    hour--;
-    let date = zonedTimeToUtc(new Date(...day, hour, minute), "Asia/Seoul");
+    let date = zonedTimeToUtc(new Date(year, month, day, hour, minute), "Asia/Seoul");
     let items = melonChartResponse.response.HITSSONGLIST.map(song => ({
         id: song.SONGID,
         name: song.SONGNAME,
