@@ -13,6 +13,8 @@ let knex = require("knex")({
 
 let { zonedTimeToUtc } = require("date-fns-tz");
 
+let { formatDate } = require("../src/path.js");
+let { videoAnalysisDuration } = require("../src/video.js");
 let { dataRefreshPeriod } = require("../src/helpers.js");
 
 function formatMelonChart(melonChartResponse) {
@@ -35,6 +37,25 @@ function formatYoutubeVideo({ id, snippet, statistics }) {
     return {
         id, publishedAt, viewCount, likeCount, dislikeCount, favoriteCount, commentCount
     };
+}
+
+function formatYoutubeCommentThread({ id, snippet }) {
+    try {
+        let commentSnippet = snippet.topLevelComment.snippet;
+        let text = commentSnippet.textOriginal;
+        let publishedAt = commentSnippet.publishedAt;
+        let likeCount = commentSnippet.likeCount;
+        let authorId = commentSnippet.authorChannelId && commentSnippet.authorChannelId.value;
+        return {
+            id, text, publishedAt, likeCount, authorId
+        };
+    } catch (e) {
+        throw e;
+    }
+}
+
+function blockIndex(date) {
+    return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
 (async () => {
@@ -96,16 +117,17 @@ function formatYoutubeVideo({ id, snippet, statistics }) {
         });
     }
 
-    // if (!await knex.schema.hasTable("comment")) {
-    //     await knex.schema.createTable("comment", table => {
-    //         table.string("id").unique();
-    //         table.string("video_id");
-    //         table.foreign("video_id").references("video.id");
-    //         table.string("datetime");
-    //         table.integer("like_count");
-    //         table.string("author_id");
-    //     });
-    // }
+    if (!await knex.schema.hasTable("comment")) {
+        await knex.schema.createTable("comment", table => {
+            table.string("id").unique();
+            table.string("text");
+            table.string("video_id");
+            table.foreign("video_id").references("video.id");
+            table.string("published_at");
+            table.integer("like_count");
+            table.string("author_id");
+        });
+    }
 
     let date = new Date();
     date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod);
@@ -161,6 +183,67 @@ function formatYoutubeVideo({ id, snippet, statistics }) {
             video_id: video.id,
             datetime: date.toISOString()
         }))).onConflict(["song_id", "video_id", "datetime"]).merge();
+        await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
+            let videoId = video.id;
+            console.log(`Downloading YouTube comments for video ${videoId}.`);
+            let currentDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
+            while (currentDate.getTime() <= date.getTime()) {
+                let nextDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000);
+                let comments = await knex("comment").select("id")
+                    .whereRaw("published_at >= ?", currentDate.toISOString())
+                    .andWhereRaw("published_at < ?", nextDate.toISOString())
+                    .andWhere("video_id", videoId);
+                if (comments.length == 0) { break; }
+                currentDate = nextDate;
+            }
+            let oldestUntrackedDate = currentDate;
+            console.log(`Oldest undtracked date for video ${videoId} is ${formatDate(oldestUntrackedDate)}.`);
+
+            let pageToken;
+            let lastDate = date;
+            let comments = [];
+            do {
+                console.log(`Downloading YouTube comment thread from ${formatDate(lastDate)} for video ${videoId}.`);
+                try {
+                    let youtubeCommentThreadsResponse = await youtube.commentThreads.list({
+                        auth: process.env.YOUTUBE_API_KEY,
+                        part: ["id", "replies", "snippet"],
+                        videoId,
+                        order: "time",
+                        pageToken,
+                        maxResults: 100
+                    });
+                    let youtubeCommentThreads = youtubeCommentThreadsResponse.data.items;
+                    let currentPageComments = youtubeCommentThreads.map(formatYoutubeCommentThread);
+
+                    for (let comment of currentPageComments) {
+                        comments.push(comment);
+                    }
+                    if (!youtubeCommentThreads.length) { break; }
+                    let lastYoutubeCommentThread = youtubeCommentThreads[youtubeCommentThreads.length - 1];
+                    lastDate = new Date(lastYoutubeCommentThread.snippet.topLevelComment.snippet.publishedAt);
+                    pageToken = youtubeCommentThreadsResponse.data.nextPageToken;
+                } catch(e) {
+                    if (e.message === `The video identified by the <code><a href="/youtube/v3/docs/commentThreads/list#videoId">videoId</a></code> parameter has disabled comments.`) {
+                        console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
+                        break;
+                    }
+                    throw e;
+                }
+            } while (pageToken && lastDate.getTime() >= oldestUntrackedDate.getTime())
+            if (comments.length > 0) {
+                for (let i = 0; i < Math.ceil(comments.length / 100); i++) {
+                    await knex("comment").insert(comments.slice(100 * i, Math.min(100 * (i + 1), comments.length)).map(comment => ({
+                        id: comment.id,
+                        video_id: videoId,
+                        text: comment.text,
+                        published_at: comment.publishedAt,
+                        like_count: comment.likeCount,
+                        author_id: comment.authorId
+                    }))).onConflict("id").merge();
+                }
+            }
+        }));
     }));
 
     await knex.destroy();
