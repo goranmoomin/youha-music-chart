@@ -54,10 +54,6 @@ function formatYoutubeCommentThread({ id, snippet }) {
     }
 }
 
-function blockIndex(date) {
-    return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
-}
-
 (async () => {
     if (!await knex.schema.hasTable("song")) {
         await knex.schema.createTable("song", table => {
