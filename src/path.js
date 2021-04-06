@@ -32,7 +32,6 @@ function youtubeSearchResultPath(date, query) {
     return path;
 }
 
-
 function youtubeCommentsDataPath(date, videoId) {
     let path = `${youtubePath(date)}/comments-list-response-${videoId}.json`;
     return path;
@@ -50,6 +49,18 @@ function chartCachePath(date) {
     return path;
 }
 
+function twitterPath(date) {
+    date = utcToZonedTime(date, "Asia/Seoul");
+    date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod);
+    let path = `charts/twitter-${format(date, "yyyy.MM.dd.HH:mm")}`;
+    return path;
+}
+
+function twitterSearchResultPath(date, query) {
+    let path = `${twitterPath(date)}/tweets-${query}.json`;
+    return path;
+}
+
 module.exports = {
     formatDate,
     melonChartPath,
@@ -58,5 +69,7 @@ module.exports = {
     youtubeSearchResultPath,
     youtubeCommentsDataPath,
     youtubeCommentsCacheDataPath,
-    chartCachePath
+    chartCachePath,
+    twitterPath,
+    twitterSearchResultPath
 };
