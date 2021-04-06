@@ -1,7 +1,7 @@
 let Koa = require("koa");
 let Router = require("@koa/router");
 
-let { getMelonChartItems, getCachedSortedChartItems } = require("./chart.js");
+let { getMelonChartItems, getYouhaChartItems } = require("./chart.js");
 
 let app = new Koa();
 let router = new Router();
@@ -68,12 +68,12 @@ router.get("/", async (ctx, next) => {
       <tbody>`;
     try {
         let date = new Date();
-        let chartItems = await getCachedSortedChartItems(date);
+        let chartItems = await getYouhaChartItems(date);
         let melonChartItems = await getMelonChartItems(date);
         for (let i = 0; i < chartItems.length; i++) {
             let music = chartItems[i];
             let melonMusic = melonChartItems[i];
-            html += `<tr><td>${i + 1}</td><td><img src="${music.albumImgUrl}" style="height: 72px;"></td><td>${music.name}</td><td>${music.score.toFixed(2)}</td><td><img src="${melonMusic.albumImgUrl}" style="height: 72px;"></td><td>${melonMusic.name}</td></tr>`;
+            html += `<tr><td>${i + 1}</td><td><img src="${music.albumimgurl}" style="height: 72px;"></td><td>${music.name}</td><td>${music.song_score.toFixed(2)}</td><td><img src="${melonMusic.albumimgurl}" style="height: 72px;"></td><td>${melonMusic.name}</td></tr>`;
         }
     } catch (e) {
         if (e.code != "ENOENT") {
@@ -87,13 +87,13 @@ router.get("/", async (ctx, next) => {
 
 router.get("/chart", async (ctx, next) => {
     let date = new Date();
-    let chart = await getCachedSortedChartItems(date);
+    let chart = await getYouhaChartItems(date);
     ctx.body = chart;
 });
 
 router.get("/chart/:date", async (ctx, next) => {
     let date = new Date(ctx.params.date);
-    let chart = await getCachedSortedChartItems(date);
+    let chart = await getYouhaChartItems(date);
     ctx.body = chart;
 });
 

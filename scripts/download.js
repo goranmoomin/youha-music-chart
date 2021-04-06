@@ -1,51 +1,34 @@
-require("dotenv").config();
-
 let fs = require("fs-extra");
 let bent = require("bent");
+let getJSON = bent("json");
 let { google } = require("googleapis");
 let youtube = google.youtube("v3");
-let {
-    zonedTimeToUtc,
-    differenceInMinutes
-} = require("date-fns-tz");
 
-let {
-    formatDate,
-    melonChartPath,
-    genieChartPath,
-    youtubePath,
-    youtubeSearchResultPath,
-    youtubeCommentsDataPath,
-    youtubeCommentsCacheDataPath,
-    chartCachePath
-} = require("../src/path.js");
-let { readJSONFile, hasKoreanLetter } = require("../src/helpers.js");
+let knex = require("knex")({
+    client: "sqlite3",
+    connection: {
+        filename: "charts.db"
+    },
+    useNullAsDefault: true
+});
+
+let { zonedTimeToUtc } = require("date-fns-tz");
+
+let { formatDate, chartCachePath } = require("../src/path.js");
 let { videoAnalysisDuration } = require("../src/video.js");
 let { dataRefreshPeriod } = require("../src/helpers.js");
-let { getSortedChart } = require("../src/chart.js");
-let getJSON = bent("json");
+let { getSortedChartItems } = require("../src/chart.js");
 
 function formatMelonChart(melonChartResponse) {
-    let day = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
-    let hour = melonChartResponse.response.RANKHOUR.split(":").map(s => Number.parseInt(s));
-    let date = zonedTimeToUtc(Date(...day, ...hour), "Asia/Seoul");
+    let [year, month, day] = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
+    month--;
+    let [hour, minute] = melonChartResponse.response.RANKHOUR.split(":").map(s => Number.parseInt(s));
+    let date = zonedTimeToUtc(new Date(year, month, day, hour, minute), "Asia/Seoul");
     let items = melonChartResponse.response.HITSSONGLIST.map(song => ({
         id: song.SONGID,
         name: song.SONGNAME,
         artistNames: song.ARTISTLIST.map(artist => artist.ARTISTNAME),
         albumImgUrl: song.ALBUMIMG
-    }));
-    return { date, items };
-}
-
-function formatGenieChart(date, genieChartResponse) {
-    date = new Date(date.getTime());
-    date.setMinutes(0);
-    let items = genieChartResponse.DataSet.DATA.map(song => ({
-        id: song.SONG_ID,
-        name: decodeURIComponent(song.SONG_NAME),
-        artistNames: [decodeURIComponent(song.ARTIST_NAME)],
-        albumImgUrl: decodeURIComponent(song.ALBUM_IMG_PATH)
     }));
     return { date, items };
 }
@@ -62,72 +45,158 @@ function formatYoutubeCommentThread({ id, snippet }) {
     try {
         let commentSnippet = snippet.topLevelComment.snippet;
         let text = commentSnippet.textOriginal;
-        let date = commentSnippet.publishedAt;
+        let publishedAt = commentSnippet.publishedAt;
         let likeCount = commentSnippet.likeCount;
         let authorId = commentSnippet.authorChannelId && commentSnippet.authorChannelId.value;
         return {
-            id, text, date, likeCount, authorId
+            id, text, publishedAt, likeCount, authorId
         };
     } catch (e) {
         throw e;
     }
 }
 
-function blockIndex(date) {
-    return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
-}
-
 (async () => {
+    if (!await knex.schema.hasTable("song")) {
+        await knex.schema.createTable("song", table => {
+            table.string("id").unique();
+            table.string("name");
+            table.string("artistnames");
+            table.string("albumimgurl");
+        });
+    }
+    if (!await knex.schema.hasTable("chart")) {
+        await knex.schema.createTable("chart", table => {
+            table.increments("id");
+            table.string("datetime");
+            table.integer("type");
+            table.unique(["datetime", "type"]);
+        });
+    }
+    if (!await knex.schema.hasTable("song_chart")) {
+        await knex.schema.createTable("song_chart", table => {
+            table.integer("chart_id");
+            table.foreign("chart_id").references("chart.id");
+            table.string("song_id");
+            table.foreign("song_id").references("song.id");
+            table.integer("song_rank");
+            table.real("song_score");
+            table.unique(["chart_id", "song_id"]);
+        });
+    }
+
+    if (!await knex.schema.hasTable("video")) {
+        await knex.schema.createTable("video", table => {
+            table.string("id").unique();
+            table.string("published_at");
+        });
+    }
+    if (!await knex.schema.hasTable("videostatistics")) {
+        await knex.schema.createTable("videostatistics", table => {
+            table.string("video_id");
+            table.foreign("video_id").references("video.id");
+            table.string("datetime");
+            table.integer("view_count");
+            table.integer("like_count");
+            table.integer("dislike_count");
+            table.integer("favorite_count");
+            table.integer("comment_count");
+            table.unique(["video_id", "datetime"]);
+        });
+    }
+
+    if (!await knex.schema.hasTable("song_video")) {
+        await knex.schema.createTable("song_video", table => {
+            table.string("song_id");
+            table.foreign("song_id").references("song.id");
+            table.string("video_id");
+            table.foreign("video_id").references("video.id");
+            table.string("datetime");
+            table.unique(["song_id", "video_id", "datetime"]);
+        });
+    }
+
+    if (!await knex.schema.hasTable("comment")) {
+        await knex.schema.createTable("comment", table => {
+            table.string("id").unique();
+            table.string("text");
+            table.string("video_id");
+            table.foreign("video_id").references("video.id");
+            table.string("published_at");
+            table.integer("like_count");
+            table.string("author_id");
+        });
+    }
+
     let date = new Date();
+    date.setMinutes(Math.floor(date.getMinutes() / dataRefreshPeriod) * dataRefreshPeriod);
+    date.setSeconds(0);
+    date.setMilliseconds(0);
+
+    console.log("Downloading Melon chart.");
     let melonChartResponse = await getJSON("https://m2.melon.com/m5/chart/hits/songChartList.json?v=5.0");
     let melonChart = formatMelonChart(melonChartResponse);
-    await fs.outputJSON(melonChartPath(date), melonChart);
-    console.log(`Downloaded Melon chart to ${melonChartPath(date)}.`);
-    let genieChartResponse = await getJSON("https://app.genie.co.kr/chart/j_RealTimeRankSongList.json");
-    let genieChart = formatGenieChart(date, genieChartResponse);
-    await fs.outputJSON(genieChartPath(date), genieChart);
-    console.log(`Downloaded Genie chart to ${genieChartPath(date)}.`);
-    let chartItems = [];
-    for (let chartItem of [...melonChart.items, ...genieChart.items]) {
-        if (!chartItems.some(item => item.name == chartItem.name)) {
-            chartItems.push(chartItem);
-        }
+    await knex("song").insert(melonChart.items).onConflict(["id"]).merge();
+    let [chartId] = await knex("chart").insert({
+        datetime: melonChart.date.toISOString(),
+        type: 1
+    }).onConflict(["datetime", "type"]).merge();
+    if (chartId != 0) { // TODO: Check whether the chart has been created or not
+        await knex("song_chart").insert(melonChart.items.map(({ id: songId }, songRank) => ({
+            song_id: songId,
+            chart_id: chartId,
+            song_rank: songRank
+        }))).onConflict(["chart_id", "song_id"]).merge();
     }
-    await Promise.all(chartItems.map(async song => {
+
+    await Promise.all(melonChart.items.map(async song => {
         console.log(`Downloading song statistics for song ${song.name}.`);
-        let name = song.name;
         let query = `${song.name} ${song.artistNames.join(" ")}`;
         let youtubeSearchResponse = await youtube.search.list({
             auth: process.env.YOUTUBE_API_KEY,
             part: "id",
             q: query,
-            maxResults: 50
+            maxResults: 10
         });
         let youtubeVideosResponse = await youtube.videos.list({
             auth: process.env.YOUTUBE_API_KEY,
             part: ["contentDetails", "id", "snippet", "statistics"],
             id: youtubeSearchResponse.data.items.map(video => video.id.videoId)
         });
-
-        let youtubeSearchResult = { items: youtubeVideosResponse.data.items.map(formatYoutubeVideo) };
-        await fs.outputJSON(youtubeSearchResultPath(date, query), youtubeSearchResult);
-        let youtubeVideos = youtubeSearchResult.items;
-
+        let youtubeVideos = youtubeVideosResponse.data.items.map(formatYoutubeVideo);
+        await knex("video").insert(youtubeVideos.map(video => ({
+            id: video.id,
+            published_at: video.publishedAt
+        }))).onConflict("id").merge();
+        await knex("videostatistics").insert(youtubeVideos.map(video => ({
+            video_id: video.id,
+            datetime: date.toISOString(),
+            view_count: video.viewCount,
+            like_count: video.likeCount,
+            dislike_count: video.dislikeCount,
+            favorite_count: video.favoriteCount,
+            comment_count: video.commentCount
+        }))).onConflict(["video_id", "datetime"]).merge();
+        await knex("song_video").insert(youtubeVideos.map(video => ({
+            song_id: song.id,
+            video_id: video.id,
+            datetime: date.toISOString()
+        }))).onConflict(["song_id", "video_id", "datetime"]).merge();
         await Promise.all(youtubeVideos.slice(0, 5).map(async video => {
             let videoId = video.id;
             console.log(`Downloading YouTube comments for video ${videoId}.`);
-            let oldestUntrackedDate;
-            for (oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video)); oldestUntrackedDate.getTime() <= date.getTime(); oldestUntrackedDate = new Date(oldestUntrackedDate.getTime() + dataRefreshPeriod * 60 * 1000)) {
-                try {
-                    await fs.readFile(youtubeCommentsDataPath(oldestUntrackedDate, videoId));
-                } catch (error) {
-                    if (error.code == "ENOENT") {
-                        break;
-                    } else {
-                        throw error;
-                    }
-                }
+            let currentDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
+            while (currentDate.getTime() <= date.getTime()) {
+                let nextDate = new Date(currentDate.getTime() + dataRefreshPeriod * 60 * 1000);
+                let comments = await knex("comment").select("id")
+                    .whereRaw("published_at >= ?", currentDate.toISOString())
+                    .andWhereRaw("published_at < ?", nextDate.toISOString())
+                    .andWhere("video_id", videoId);
+                if (comments.length == 0) { break; }
+                currentDate = nextDate;
             }
+            let oldestUntrackedDate = currentDate;
+            console.log(`Oldest undtracked date for video ${videoId} is ${formatDate(oldestUntrackedDate)}.`);
 
             let pageToken;
             let lastDate = date;
@@ -147,11 +216,7 @@ function blockIndex(date) {
                     let currentPageComments = youtubeCommentThreads.map(formatYoutubeCommentThread);
 
                     for (let comment of currentPageComments) {
-                        let commentWrittenDate = new Date(comment.date);
-                        if (blockIndex(date) > blockIndex(commentWrittenDate)
-                            && blockIndex(commentWrittenDate) >= blockIndex(oldestUntrackedDate)) {
-                            comments.push(comment);
-                        }
+                        comments.push(comment);
                     }
                     if (!youtubeCommentThreads.length) { break; }
                     let lastYoutubeCommentThread = youtubeCommentThreads[youtubeCommentThreads.length - 1];
@@ -164,42 +229,38 @@ function blockIndex(date) {
                     }
                     throw e;
                 }
-            } while (pageToken && blockIndex(lastDate) >= blockIndex(oldestUntrackedDate))
-
-            let currentBlockStartIndex = 0, currentCommentIndex = 0;
-            for (let currentBlockIndex = blockIndex(date) - 1; currentBlockIndex >= blockIndex(oldestUntrackedDate); --currentBlockIndex) {
-                while (currentCommentIndex < comments.length
-                       && blockIndex(new Date(comments[currentCommentIndex].date)) == currentBlockIndex) { ++currentCommentIndex; }
-                await fs.outputJSON(youtubeCommentsDataPath(new Date(currentBlockIndex * dataRefreshPeriod * 60 * 1000), videoId),
-                                    { items: comments.slice(currentBlockStartIndex, currentCommentIndex) });
-                currentBlockStartIndex = currentCommentIndex + 1;
-                currentCommentIndex = currentBlockStartIndex;
-            }
-
-            await Promise.all([...Array(blockIndex(date) - blockIndex(oldestUntrackedDate)).keys()].map(async index => {
-                let currentDate = new Date((blockIndex(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
-                try {
-                    let { items: currentComments } = await readJSONFile(youtubeCommentsDataPath(currentDate, videoId));
-                    let currentBlockCommentCount = currentComments.length;
-                    let currentBlockKoreanCommentCount = 0;
-                    for (let comment of currentComments) {
-                        if (hasKoreanLetter(comment.text)) {
-                            ++currentBlockKoreanCommentCount;
-                        }
-                    }
-                    let currentBlockCommentInfo = { total: currentBlockCommentCount, korean: currentBlockKoreanCommentCount };
-                    await fs.outputJSON(youtubeCommentsCacheDataPath(currentDate, videoId), currentBlockCommentInfo);
-                } catch (error) {
-                    // TODO: Find out why this error happens.
-                    console.log(currentDate, videoId);
-                    console.error(error);
+            } while (pageToken && lastDate.getTime() >= oldestUntrackedDate.getTime())
+            if (comments.length > 0) {
+                for (let i = 0; i < Math.ceil(comments.length / 100); i++) {
+                    await knex("comment").insert(comments.slice(100 * i, Math.min(100 * (i + 1), comments.length)).map(comment => ({
+                        id: comment.id,
+                        video_id: videoId,
+                        text: comment.text,
+                        published_at: comment.publishedAt,
+                        like_count: comment.likeCount,
+                        author_id: comment.authorId
+                    }))).onConflict("id").merge();
                 }
-            }));
+            }
         }));
-        console.log(`Downloaded song statistics for song ${song.name}.`);
     }));
-    console.log(`Downloaded YouTube data to ${youtubePath(date)}.`);
-    let chart = await getSortedChart(date);
-    await fs.outputJSON(chartCachePath(date), chart);
-    console.log(`Cached chart to ${chartCachePath(date)}`);
+
+    let chartItems = await getSortedChartItems(date);
+    let [youhaChartId] = await knex("chart").insert({
+        datetime: date.toISOString(),
+        type: 0
+    }).onConflict(["datetime", "type"]).merge();
+    if (youhaChartId != 0) {
+        await Promise.all(chartItems.map(async (song, songRank) => {
+            await knex("song_chart").insert({
+                song_id: song.id,
+                chart_id: youhaChartId,
+                song_rank: songRank,
+                song_score: song.score
+            }).onConflict(["chart_id", "song_id"]).merge();
+        }));
+    }
+    console.log(`Cached chart.`);
+
+    await knex.destroy();
 })();

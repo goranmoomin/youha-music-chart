@@ -1,12 +1,14 @@
 let fs = require("fs-extra");
-let {
-    melonChartPath,
-    genieChartPath,
-    chartCachePath,
-    youtubeSearchResultPath,
-    youtubeCommentsCacheDataPath
-} = require("./path.js");
-let { readJSONFile } = require("./helpers.js");
+
+let knex = require("knex")({
+    client: "sqlite3",
+    connection: {
+        filename: "charts.db"
+    },
+    useNullAsDefault: true
+});
+
+let { hasKoreanLetter } = require("./helpers.js");
 let { videoAnalysisDuration } = require("./video.js");
 let { dataRefreshPeriod } = require("./helpers.js");
 
@@ -14,90 +16,76 @@ function blockIndex(date) {
     return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
 }
 
-async function getMelonChart(date) {
-    let path = melonChartPath(date);
-    let chart = await readJSONFile(path);
-    return chart;
+async function getYouhaChartItems(date) {
+    let prevDate = new Date(date.getTime() - dataRefreshPeriod * 60 * 1000);
+    let youhaChart = await knex("song_chart")
+        .join("chart", "song_chart.chart_id", "=", "chart.id")
+        .join("song", "song_chart.song_id", "=", "song.id")
+        .where({ "chart.type": 0 })
+        .andWhereRaw("chart.datetime >= ?", prevDate.toISOString())
+        .andWhereRaw("chart.datetime < ?", date.toISOString())
+        .orderBy("song_chart.song_rank");
+    return youhaChart;
 }
 
 async function getMelonChartItems(date) {
-    return (await getMelonChart(date)).items;
+    let prevDate = new Date(date.getTime() - 60 * 60 * 1000);
+    let melonChart = await knex("song_chart")
+        .join("chart", "song_chart.chart_id", "=", "chart.id")
+        .join("song", "song_chart.song_id", "=", "song.id")
+        .where({ "chart.type": 1 })
+        .andWhereRaw("chart.datetime >= ?", prevDate.toISOString())
+        .andWhereRaw("chart.datetime < ?", date.toISOString())
+        .orderBy("song_chart.song_rank");
+    return melonChart;
 }
 
-async function getGenieChart(date) {
-    let path = genieChartPath(date);
-    let chart = await readJSONFile(path);
-    return chart;
-}
+async function getYoutubeVideos(date, songId) {
+    date = new Date(Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000)) * (dataRefreshPeriod * 60 * 1000));
+    let videostatistics = await knex("videostatistics")
+        .whereIn("video_id", knex("song_video")
+                 .select("video_id")
+                 .where({ song_id: songId }))
+        .andWhere({ datetime: date.toISOString() });
 
-async function getGenieChartItems(date) {
-    return (await getGenieChart(date)).items;
-}
-
-async function getYoutubeVideos(date, query) {
-    let path = youtubeSearchResultPath(date, query);
-    let { items } = await readJSONFile(path);
-    return items;
+    return Promise.all(videostatistics.map(async videoInfo => ({
+        id: videoInfo.video_id,
+        commentCount: videoInfo.comment_count,
+        viewCount: videoInfo.view_count,
+        publishedAt: (await knex("video")
+                      .where({ id: videoInfo.video_id }))[0].published_at
+    })));
 }
 
 async function getKoreanCommentRate(date, video) {
     let videoId = video.id;
     let totalCommentCount = 0, totalKoreanCommentCount = 0;
-    let oldestUntrackedDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
-    await Promise.all([...Array(blockIndex(date) - blockIndex(oldestUntrackedDate)).keys()].map(async index => {
-        let date = new Date((blockIndex(oldestUntrackedDate) + index) * dataRefreshPeriod * 60 * 1000);
-        let path = youtubeCommentsCacheDataPath(date, videoId);
-        try {
-            let { total, korean } = await readJSONFile(path);
-            totalCommentCount += total;
-            totalKoreanCommentCount += korean;
-        } catch (error) {
-            if (error.code != "ENOENT") {
-                throw error;
-            }
-        }
-    }));
-
+    
+    let startDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
+    (await knex("comment").select("text")
+     .where({ video_id: videoId })
+     .andWhereRaw("published_at >= ?", startDate.toISOString())
+     .andWhereRaw("published_at < ?", date.toISOString()))
+        .forEach(comment => {
+            ++totalCommentCount;
+            if (hasKoreanLetter(comment.text)) { ++totalKoreanCommentCount; }
+        });
     if (totalCommentCount == 0) { return undefined; }
     return totalKoreanCommentCount / totalCommentCount;
 }
 
 async function getSortedChartItems(date) {
     let pastDate = new Date(date.getTime() - dataRefreshPeriod * 60 * 1000);
-    let melonChartItems;
-    let genieChartItems;
-    try {
-        melonChartItems = await getMelonChartItems(date);
-    } catch (e) {
-        if (e.code != "ENOENT") {
-            throw e;
-        }
-        melonChartItems = [];
-    }
-    try {
-        genieChartItems = await getGenieChartItems(date);
-    } catch (e) {
-        if (e.code != "ENOENT") {
-            throw e;
-        }
-        genieChartItems = [];
-    }
-    let chartItems = [];
-    for (let chartItem of [...melonChartItems, ...genieChartItems]) {
-        if (!chartItems.some(item => item.name == chartItem.name)) {
-            chartItems.push(chartItem);
-        }
-    }
+    let melonChartItems = await getMelonChartItems(date);
+    let chartItems = melonChartItems;
 
     let musicScores = new Map();
     for (let song of chartItems) {
-        let videoCounts = new Map();
         let name = song.name;
-        let query = `${song.name} ${song.artistNames.join(" ")}`;
-        let currentVideos = await getYoutubeVideos(date, query);
+        let currentVideos = await getYoutubeVideos(date, song.song_id);
         let pastVideos;
         try {
-            pastVideos = await getYoutubeVideos(pastDate, query);
+            pastVideos = await getYoutubeVideos(pastDate, song.song_id);
         } catch (e) {
             if (e.code == "ENOENT") {
                 continue;
@@ -126,6 +114,8 @@ async function getSortedChartItems(date) {
         }
     }
 
+    await knex.destroy();
+
     let chart = [...musicScores].sort((a, b) => -(a[1] - b[1])).map(([name, score]) => ({
         score,
         ...chartItems.find(song => song.name == name)
@@ -133,32 +123,8 @@ async function getSortedChartItems(date) {
     return chart;
 }
 
-async function getSortedChart(date) {
-    return { items: await getSortedChartItems(date) };
-}
-
-async function getCachedSortedChart(date) {
-    try {
-        return await readJSONFile(chartCachePath(date));
-    } catch (e) {
-        if (e.code == "ENOENT") {
-            let chart = await getSortedChart(date);
-            await fs.outputJSON(chartCachePath(date), chart);
-            return chart;
-        }
-        throw e;
-    }
-}
-
-async function getCachedSortedChartItems(date) {
-    return (await getCachedSortedChart(date)).items;
-}
-
 module.exports = {
-    getMelonChart,
     getMelonChartItems,
-    getSortedChart,
-    getSortedChartItems,
-    getCachedSortedChart,
-    getCachedSortedChartItems
+    getYouhaChartItems,
+    getSortedChartItems
 };
