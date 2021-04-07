@@ -46,7 +46,7 @@ router.get("/", async (ctx, next) => {
       for (let i = 0; i < chartItems.length; i++) {
         let music = chartItems[i];
         let melonMusic = melonChartItems[i];
-        tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumImgUrl}" style="height: 72px;"></td><td>$\{music.name}</td><td>$\{music.score.toFixed(2)}</td><td><img src="$\{melonMusic.albumImgUrl}" style="height: 72px;"></td><td>$\{melonMusic.name}</td></tr>\`;
+        tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumimgurl}" style="height: 72px;"></td><td>$\{music.name}</td><td>$\{music.song_score.toFixed(2)}</td><td><img src="$\{melonMusic.albumimgurl}" style="height: 72px;"></td><td>$\{melonMusic.name}</td></tr>\`;
       }
       tbodyEl.innerHTML = tableBodyHTML;
     }
