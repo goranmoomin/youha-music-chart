@@ -54,6 +54,14 @@ router.get("/", async (ctx, next) => {
     timeInputEl.addEventListener("change", updateChartHTML);
   });
   </script>
+  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MSG83P7S3F"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-MSG83P7S3F');
+  </script>
 </head>
 <body>
   <section>
