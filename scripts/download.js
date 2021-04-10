@@ -227,6 +227,10 @@ function formatYoutubeCommentThread({ id, snippet }) {
                         console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
                         break;
                     }
+                    if (e.message === `The API server failed to successfully process the request. While this can be a transient error, it usually indicates that the request's input is invalid. Check the structure of the <code>commentThread</code> resource in the request body to ensure that it is valid.`) {
+                        console.log(`Not downloading YouTube comment thread for video ${videoId} as YouTube API server failed to process the request.`);
+                        break;
+                    }
                     throw e;
                 }
             } while (pageToken && lastDate.getTime() >= oldestUntrackedDate.getTime())
