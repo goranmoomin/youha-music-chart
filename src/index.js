@@ -15,6 +15,27 @@ router.get("/", async (ctx, next) => {
   <script src="https://cdn.jsdelivr.net/npm/time-input-polyfill"></script>
   <script>
   window.addEventListener("load", function () {
+    let shownItems = "all";
+    document.querySelector(".chart-table th:nth-child(5)").addEventListener("click", e => {
+      let showRegex;
+      if (shownItems == "positive") {
+        shownItems = "negative";
+        showRegex = /\\-\\d+/;
+      } else if (shownItems == "all") {
+        shownItems = "positive";
+        showRegex = /\\+\\d+/;
+      } else if (shownItems == "negative") {
+        shownItems = "all";
+        showRegex = /.+/;
+      }
+      for (let element of document.querySelectorAll(".chart-table td:nth-child(5)")) {
+        if (element.innerText.match(showRegex)) {
+          element.parentElement.style.display = "";
+        } else {
+          element.parentElement.style.display = "none";
+        }
+      }
+    });
     let abortController = new AbortController();
     let dateInputEl = document.querySelector("input[type=date]");
     let timeInputEl = document.querySelector("input[type=time]");
@@ -46,9 +67,16 @@ router.get("/", async (ctx, next) => {
       for (let i = 0; i < chartItems.length; i++) {
         let music = chartItems[i];
         let melonMusic = melonChartItems[i];
-        tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumimgurl}" style="height: 72px;"></td><td>$\{music.name}</td><td>$\{music.song_score.toFixed(2)}</td><td><img src="$\{melonMusic.albumimgurl}" style="height: 72px;"></td><td>$\{melonMusic.name}</td></tr>\`;
+        let musicMelonChartIndex = melonChartItems.findIndex(melonMusic => music.id == melonMusic.id);
+        function formatDelta(delta) {
+          if (delta > 0) { return \`<span style="color:red">+$\{delta}</span>\`; }
+          else if (delta == 0) { return "-"; }
+          else { return \`<span style="color:blue">$\{delta}</span>\`; }
+        }
+        tableBodyHTML += \`<tr><td>$\{i + 1}</td><td><img src="$\{music.albumimgurl}" style="height: 72px;"></td><td>$\{music.name}</td><td>$\{music.song_score.toFixed(2)}</td><td>$\{musicMelonChartIndex == -1 ? "" : formatDelta(musicMelonChartIndex - i)}</td><td>$\{i + 1}</td><td><img src="$\{melonMusic.albumimgurl}" style="height: 72px;"></td><td>$\{melonMusic.name}</td></tr>\`;
       }
       tbodyEl.innerHTML = tableBodyHTML;
+      shownItems = "all";
     }
     dateInputEl.addEventListener("change", updateChartHTML);
     timeInputEl.addEventListener("change", updateChartHTML);
@@ -69,9 +97,9 @@ router.get("/", async (ctx, next) => {
     <input type="time" title="chart time">
   </section>
   <section>
-    <table>
+    <table class="chart-table">
       <thead>
-        <tr><th>순위</th><th>앨범 표지</th><th>곡 이름</th><th>점수</th><th>앨범 표지</th><th>곡 이름</th></tr>
+        <tr><th>순위</th><th>앨범 표지</th><th>곡 이름</th><th>점수</th><th>변동 순위</th><th>순위</th><th>앨범 표지</th><th>곡 이름</th></tr>
       </thead>
       <tbody>`;
     try {
@@ -81,7 +109,13 @@ router.get("/", async (ctx, next) => {
         for (let i = 0; i < chartItems.length; i++) {
             let music = chartItems[i];
             let melonMusic = melonChartItems[i];
-            html += `<tr><td>${i + 1}</td><td><img src="${music.albumimgurl}" style="height: 72px;"></td><td>${music.name}</td><td>${music.song_score.toFixed(2)}</td><td><img src="${melonMusic.albumimgurl}" style="height: 72px;"></td><td>${melonMusic.name}</td></tr>`;
+            let musicMelonChartIndex = melonChartItems.findIndex(melonMusic => music.id == melonMusic.id);
+            function formatDelta(delta) {
+                if (delta > 0) { return `<span style="color:red">+${delta}</span>`; }
+                else if (delta == 0) { return "-"; }
+                else { return `<span style="color:blue">${delta}</span>`; }
+            }
+            html += `<tr><td>${i + 1}</td><td><img src="${music.albumimgurl}" style="height: 72px;"></td><td>${music.name}</td><td>${music.song_score.toFixed(2)}</td><td>${musicMelonChartIndex == -1 ? "" : formatDelta(musicMelonChartIndex - i)}</td><td>${i + 1}</td><td><img src="${melonMusic.albumimgurl}" style="height: 72px;"></td><td>${melonMusic.name}</td></tr>`;
         }
     } catch (e) {
         if (e.code != "ENOENT") {
