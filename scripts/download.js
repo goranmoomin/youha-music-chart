@@ -9,7 +9,8 @@ let knex = require("knex")({
     connection: {
         filename: "charts.db"
     },
-    useNullAsDefault: true
+    useNullAsDefault: true,
+    acquireConnectionTimeout: 120000 // FIXME: Revamp the download script and remove this
 });
 
 let { zonedTimeToUtc } = require("date-fns-tz");
