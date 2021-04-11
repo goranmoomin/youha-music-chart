@@ -228,7 +228,7 @@ function formatYoutubeCommentThread({ id, snippet }) {
                         console.log(`Not downloading YouTube comment thread for video ${videoId} as it has disabled comments.`);
                         break;
                     }
-                    if (e.message === `The API server failed to successfully process the request. While this can be a transient error, it usually indicates that the request's input is invalid. Check the structure of the <code>commentThread</code> resource in the request body to ensure that it is valid.`) {
+                    if (e.message === `The API server failed to successfully process the request. While this can be a transient error, it usually indicates that the request's input is invalid. Check the structure of the <code>commentThread</code> resource in the request body to ensure that it is valid.` || e.message === `The video identified by the <code><a href="/youtube/v3/docs/commentThreads/list#videoId">videoId</a></code> parameter could not be found.`) {
                         console.log(`Not downloading YouTube comment thread for video ${videoId} as YouTube API server failed to process the request.`);
                         break;
                     }
