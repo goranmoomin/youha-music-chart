@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 let Koa = require("koa");
 let Router = require("@koa/router");
 

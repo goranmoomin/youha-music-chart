@@ -1,5 +1,3 @@
-let fs = require("fs-extra");
-
 let knex = require("knex")({
     client: "sqlite3",
     connection: {
@@ -11,10 +9,6 @@ let knex = require("knex")({
 let { hasKoreanLetter } = require("./helpers.js");
 let { videoAnalysisDuration } = require("./video.js");
 let { dataRefreshPeriod } = require("./helpers.js");
-
-function blockIndex(date) {
-    return Math.floor(date.getTime() / (dataRefreshPeriod * 60 * 1000));
-}
 
 async function getYouhaChartItems(date) {
     let prevDate = new Date(date.getTime() - dataRefreshPeriod * 60 * 1000);

@@ -1,13 +1,3 @@
-require("dotenv").config();
-
-let fs = require("fs-extra");
-
-async function readJSONFile(path) {
-    let data = await fs.readFile(path);
-    let json = JSON.parse(data);
-    return json;
-}
-
 function hasKoreanLetter(comment) {
     for (let index = 0; index < comment.length; ++index) {
         let unicode = comment.charCodeAt(index);
@@ -25,7 +15,6 @@ function hasKoreanLetter(comment) {
 let dataRefreshPeriod = (process.env.DATA_REFRESH_PERIOD || 30);
 
 module.exports = {
-    readJSONFile,
     hasKoreanLetter,
     dataRefreshPeriod
 };

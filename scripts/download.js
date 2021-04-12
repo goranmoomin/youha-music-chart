@@ -1,4 +1,5 @@
-let fs = require("fs-extra");
+require("dotenv").config();
+
 let bent = require("bent");
 let getJSON = bent("json");
 let { google } = require("googleapis");
@@ -12,13 +13,15 @@ let knex = require("knex")({
     useNullAsDefault: true,
     acquireConnectionTimeout: 120000 // FIXME: Revamp the download script and remove this
 });
-
-let { zonedTimeToUtc } = require("date-fns-tz");
-
-let { formatDate, chartCachePath } = require("../src/path.js");
+let { utcToZonedTime, zonedTimeToUtc, format } = require("date-fns-tz");
 let { videoAnalysisDuration } = require("../src/video.js");
 let { dataRefreshPeriod } = require("../src/helpers.js");
 let { getSortedChartItems } = require("../src/chart.js");
+
+function formatDate(date) {
+    date = utcToZonedTime(date, "Asia/Seoul");
+    return format(date, "yyyy.MM.dd.HH:mm");
+}
 
 function formatMelonChart(melonChartResponse) {
     let [year, month, day] = melonChartResponse.response.RANKDAY.split(".").map(s => Number.parseInt(s));
