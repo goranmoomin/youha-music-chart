@@ -22,8 +22,8 @@ async function getYouhaChartItems(date) {
         .join("chart", "song_chart.chart_id", "=", "chart.id")
         .join("song", "song_chart.song_id", "=", "song.id")
         .where({ "chart.type": 0 })
-        .andWhereRaw("chart.datetime >= ?", prevDate.toISOString())
-        .andWhereRaw("chart.datetime < ?", date.toISOString())
+        .andWhereRaw("chart.datetime > ?", prevDate.toISOString())
+        .andWhereRaw("chart.datetime <= ?", date.toISOString())
         .orderBy("song_chart.song_rank");
     return youhaChart;
 }
@@ -34,8 +34,8 @@ async function getMelonChartItems(date) {
         .join("chart", "song_chart.chart_id", "=", "chart.id")
         .join("song", "song_chart.song_id", "=", "song.id")
         .where({ "chart.type": 1 })
-        .andWhereRaw("chart.datetime >= ?", prevDate.toISOString())
-        .andWhereRaw("chart.datetime < ?", date.toISOString())
+        .andWhereRaw("chart.datetime > ?", prevDate.toISOString())
+        .andWhereRaw("chart.datetime <= ?", date.toISOString())
         .orderBy("song_chart.song_rank");
     return melonChart;
 }
@@ -60,7 +60,7 @@ async function getYoutubeVideos(date, songId) {
 async function getKoreanCommentRate(date, video) {
     let videoId = video.id;
     let totalCommentCount = 0, totalKoreanCommentCount = 0;
-    
+
     let startDate = new Date(date.getTime() - videoAnalysisDuration(date, video));
     (await knex("comment").select("text")
      .where({ video_id: videoId })
